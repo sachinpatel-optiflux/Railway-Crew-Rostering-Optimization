@@ -1,0 +1,27 @@
+add rows for the users based on the demand for each activty head 
+so we will have for each day ; total no of activity demands per day 
+
+also we will add rows of no activity also ; basically needed for overtime work hours {not considereed for now , will implement later}
+
+for FIFO : travel_in and travel-out stats also ; whe ecactly they are coming and leaving 
+travel_in should be before the first shift and travel-out should be after the last shft 
+{for now randomly set the data}
+
+for residential : first shift should be fay shoft
+
+Extras: 
+
+1) excess: when the demand requires lesser people than what is assigned 
+2) relief: extra relef that we have , activty name and head woild be both relief , not assigned to any activity , juts kept as extras\
+
+if excess tales leave , then no problem( it ia basically excess)
+we will have to see iof some relief or excess are prseent which can be reasigned to these places
+
+initial case :
+We should be able to get the initial roster (withut any leaves)
+we can use random or greedy assigemnts to mke the initial roster
+we can create more user ids if needed for inital roster assignemnt 
+
+after the inital roster is made , we will remiove maybe 10 pwrcent of the roster 
+then we will try to reasign the excess and relief to those gaps 
+

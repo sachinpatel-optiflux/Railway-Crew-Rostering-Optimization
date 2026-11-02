@@ -1,0 +1,8 @@
+crew master data 
+we need 1000 crew members 
+
+400 = Haskett  ==> 300 residential + 100 FIFO
+300 = Yarmouth ==> 300 FIFO
+300 = Nelaway ==> 200 Residential + 100 FIFO
+
+Residential and FIFO == > classification column values
