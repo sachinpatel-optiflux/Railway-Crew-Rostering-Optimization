@@ -1,0 +1,19 @@
+Activity ID,Activity Name,Activity Group,Activity Head,Activity Type,TEA Required,Can Be Moved,Start Depot,End Depot,Mentor Required,Roles/Job,Currency Threshold
+A01,Haskett Mainline,Mainline,Haskett Mainline,Driving,,,Haskett,Yarmouth,No,Driver,90
+A02,Haskett Mainline CO,Mainline,Haskett Mainline,Crew On,,,Haskett,Haskett,No,Driver;Conductor,
+A03,Yarmouth Mainline,Mainline,Yarmouth Mainline,Driving,,,Yarmouth,Haskett,No,Driver,90
+A04,Yarmouth Mainline CO,Mainline,Yarmouth Mainline,Crew On,,,Yarmouth,Yarmouth,No,Driver;Conductor,
+A05,CAM LOT,Yard,CAM LOT,Yard,,,Yarmouth,Yarmouth,No,Driver;Shunter,
+A06,Madison Crew,Yard,Madison Crew,Crew,,,Haskett,Haskett,No,Driver;Conductor,
+A07,Madison Yard,Yard,Madison Yard,Yard,,,Haskett,Haskett,No,Shunter;Driver,
+A08,Work Train,Mainline,Work Train,Driving,,,Haskett,Yarmouth,Yes,Driver,
+A17,Work Train CO,Mainline,Work Train,Driving,,,Haskett,Haskett,Yes,Driver,
+A09,Fuel Train,Yard,Fuel Train,Driving,,,Haskett,Haskett,No,Driver,60
+A10,Fuel Return,Yard,Fuel Return,Driving,,,Haskett,Haskett,No,Driver,60
+A11,Bethway Join/FI Crew,Yard,Bethway Join/FI Crew,Crew,,,Haskett,Haskett,No,Driver;Conductor;Shunter,
+A12,BY Ship,Yard,BY Ship,Shed,,,Haskett,Haskett,No,Shunter;Driver,
+A13,Nelaway Driver,Yard,Nelaway Driver,Driving,,,Nelaway,Nelaway,No,Driver,
+A14,Nelaway Shuttle Driver,Yard,Nelaway Shuttle Driver,Driving,,,Nelaway,Nelaway,No,Driver,
+A15,NE Ship,Yard,NE Ship,Shed,,,Haskett,Haskett,No,Shunter;Driver,
+A16,NE Crew,Yard,NE Crew,Crew,,,Haskett,Haskett,No,Driver;Conductor;Shunter,
+A90,Relief,Reserve,Relief,Relief,,,,,No,,

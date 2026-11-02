@@ -1,0 +1,37 @@
+
+
+shift  = only need start time (not 5 -17)
+
+A1 = haskett mainline
+
+haskett mainline and yarmouth mainlione = 1 person per hour (24 people /day)
+end time = 12 hrs 
+
+cam lot = 1 person / 3hrs ; 00:00 = 1 ; 03:00 = 1 person like that
+
+madison crew = 1 person / hr 
+
+madison yard = 1 person / 3 hrs ; 01:00 = 1; 04 = another person ... like very 3 hr 1 person
+
+work train = 2 people at 22:00
+
+fuel train = 1 person at 10:00
+
+fuel return = 1 person at 10:00
+
+nelaway driver =  1 person / hr
+
+nelaway shuttle =  1 person / 3 hrs ; starting at 01:00... like that 
+
+bethaway join = 1 people / 3 hrs ;  starting at 04:00... like that
+
+NE ship = ; AT 04:00 , 16:00, 09:00 , 21;00 (i person per hour)
+
+	{NE task = replace by NE Crew}
+
+NE Crew = at 04:00 and 16:00 and 07:00 and 19:00 , 09:00 and 21:00 ==> 4 people each 
+			 0:00 and 12:00 ==> 2 poeple each
+			 
+			 {replace By Shed with By Ship)
+			 
+By Shed = similar to NE Ship
