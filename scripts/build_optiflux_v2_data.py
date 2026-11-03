@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Build the OptiFlux v2 data tables from the uploaded files and the new rules.
+"""Build the fixed OptiFlux v2 tables (everything except the roster and the per-person tables).
+
+Step 1 of 2. Step 2 is ``scripts/roster_making.py``, which builds the roster and,
+from it, the crew list and the per-person tables.
 
 Inputs (kept unchanged, for traceability):
-    data/optiflux_v2/source/*.csv          the four tables as supplied
-    data/optiflux_v2/source/rules/*.txt    the rule notes as supplied
+    data/optiflux_v2/source/*.csv                      the four tables as uploaded
+    data/optiflux_v2/source/rules/*.txt                the rule notes as supplied
+    data/optiflux_v2/source/from_generated_small/*.csv compliance matrix and priority list of the old data
 
 Outputs (overwritten):
-    data/optiflux_v2/activities_df.csv
-    data/optiflux_v2/activity_demand_df.csv
-    data/optiflux_v2/crew_master_data_df.csv
-    data/optiflux_v2/roster_df.csv          header only: the roster is built in a later step
+    activities_df.csv, activity_demand_df.csv, activity_priority.csv, excluded_activities.csv,
+    compliance_matrix_df.csv, constraints_df.csv,
+    crew_restrictions.csv, Crew_Onsite_App.csv            (header only: no leave, no check-ins yet)
 
 Every change is explained in Progress/real_data_understanding/03_data_changes.md.
 The script uses only the standard library and is deterministic.
@@ -27,8 +30,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DIR = ROOT / "data" / "optiflux_v2"
 
-SHIFT_HOURS = 12  # every shift lasts 12 h; the demand table stores only the start time
-
 # ---------------------------------------------------------------------------
 # Rules: activities_df
 # ---------------------------------------------------------------------------
@@ -38,27 +39,29 @@ RENAMES = {
     "A12": {"Activity Name": "BY Ship", "Activity Head": "BY Ship"},
     "A16": {"Activity Name": "NE Crew", "Activity Head": "NE Crew"},
 }
+OLD_NAMES = {"BY Shed": "BY Ship", "NE Task": "NE Crew"}
 
 # The upload has two rows with Activity ID A08 (Work Train, Work Train CO).
 # Activity ID is a key, so Work Train CO gets the next free ID.
 DUPLICATE_ID_FIX = {("A08", "Work Train CO"): "A17"}
 
-# general_rules_assignment.txt: "relief: extra relief that we have, activity name and head would be
-# both relief, not assigned to any activity, just kept as extras".
-RELIEF_ACTIVITY = {
-    "Activity ID": "A90",
-    "Activity Name": "Relief",
-    "Activity Group": "Reserve",
-    "Activity Head": "Relief",
-    "Activity Type": "Relief",
-    "TEA Required": "",
-    "Can Be Moved": "",
-    "Start Depot": "",
-    "End Depot": "",
-    "Mentor Required": "No",
-    "Roles/Job": "",
-    "Currency Threshold": "",
-}
+
+def _non_work(aid: str, name: str, group: str, head: str, typ: str) -> dict[str, str]:
+    return {
+        "Activity ID": aid, "Activity Name": name, "Activity Group": group, "Activity Head": head,
+        "Activity Type": typ, "TEA Required": "", "Can Be Moved": "", "Start Depot": "", "End Depot": "",
+        "Mentor Required": "No", "Roles/Job": "", "Currency Threshold": "",
+    }  # fmt: skip
+
+
+EXTRA_ACTIVITIES = [
+    # general_rules_assignment.txt: "relief: ... activity name and head would be both relief,
+    # not assigned to any activity, just kept as extras".
+    _non_work("A90", "Relief", "Reserve", "Relief", "Relief"),
+    # general_rules_assignment.txt: FIFO "travel_in and travel_out ... when exactly they are coming and leaving".
+    _non_work("A91", "Travel In", "Travel", "Travel", "Travel"),
+    _non_work("A92", "Travel Out", "Travel", "Travel", "Travel"),
+]
 
 # ---------------------------------------------------------------------------
 # Rules: activity_demand_df  (demand_changes.txt)
@@ -95,18 +98,43 @@ DEMAND_RULES: dict[str, list[tuple[int, int]]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Rules: crew_master_data_df  (crew_master_data_changes.txt)
+# Rules: constraints_df  (settings read by scripts/roster_making.py)
 # ---------------------------------------------------------------------------
 
-# (Depot, Classification, count), in User Id order.
-CREW_PLAN = [
-    ("Haskett", "Residential", 300),
-    ("Haskett", "FIFO", 100),
-    ("Yarmouth", "FIFO", 300),
-    ("Nelaway", "Residential", 200),
-    ("Nelaway", "FIFO", 100),
+CONSTRAINTS = [
+    # Planning horizon of the initial roster (open question Q11): one full FIFO cycle.
+    ("Planning Horizon Start", "2026-11-01", "Active"),
+    ("Planning Horizon Days", "28", "Active"),
+    # demand_changes.txt: "end time = 12 hrs".
+    ("Shift Length Hours", "12", "Active"),
+    # Carried over from the previous model (briefing section 9).
+    ("Ordinary Rest Hours", "11", "Active"),
+    ("Transition Rest Hours", "23", "Active"),
+    ("Day Shift Window", "03:00-15:00", "Active"),
+    ("Max Duties Per Day", "1", "Active"),
+    # Swing patterns from the briefing (FIFO "swing 14 days", Residential "swing 6 days"); open question Q3.
+    ("FIFO Work/Off Days", "14/14", "Active"),
+    ("Residential Work/Off Days", "6/6", "Active"),
+    # general_rules_assignment.txt: "for residential: first shift should be day shift".
+    ("Residential First Shift Day", "", "Active"),
+    # general_rules_assignment.txt: FIFO travel_in before the first shift, travel_out after the last; random for now.
+    ("FIFO Travel", "", "Active"),
+    ("Travel Gap Hours", "1-4", "Active"),
+    ("Travel Duration Hours", "2-6", "Active"),
+    ("Base Return At Swing End", "", "Active"),
+    # general_rules_assignment.txt: "initial roster (without any leaves)".
+    ("Leave In Initial Roster", "", "Inactive"),
+    # general_rules_assignment.txt: "add rows of no activity ... overtime {not considered for now}".
+    ("No Activity Rows", "", "Inactive"),
+    # Share of each activity's shift lines given an extra Excess line (see 05_roster_generation.md).
+    ("Excess Line Fraction", "0.10", "Active"),
+    # general_rules_assignment.txt: "remove maybe 10 percent of the roster", then refill from Relief/Excess.
+    ("Recovery Removal Fraction", "0.10", "Active"),
+    # Previous model, for the recovery step: Relief may start at any time, Excess may move by 1 h.
+    ("Relief Allowed Start Offsets", "ANY", "Active"),
+    ("Excess Allowed Start Offsets", "-60;0;60", "Active"),
+    ("Random Seed", "2026", "Active"),
 ]
-FIRST_USER_NUMBER = 100001  # same User Id format as the upload (U100001 ...)
 
 # ---------------------------------------------------------------------------
 
@@ -134,9 +162,8 @@ def build_activities(source: Path) -> tuple[list[str], list[dict[str, str]]]:
             r["Activity ID"] = new_id
         r.update(RENAMES.get(r["Activity ID"], {}))
         out.append(r)
-    out.append(dict(RELIEF_ACTIVITY))
-    ids = [r["Activity ID"] for r in out]
-    dupes = [i for i, n in Counter(ids).items() if n > 1]
+    out.extend(dict(a) for a in EXTRA_ACTIVITIES)
+    dupes = [i for i, n in Counter(r["Activity ID"] for r in out).items() if n > 1]
     if dupes:
         raise SystemExit(f"duplicate Activity ID after fixes: {dupes}")
     return header, out
@@ -166,53 +193,89 @@ def build_demand(activities: list[dict[str, str]]) -> tuple[list[str], list[dict
     return header, rows
 
 
-def build_crew(source: Path) -> tuple[list[str], list[dict[str, str]]]:
-    header, _ = read_csv(source / "crew_master_data_df.csv")
-    rows = []
-    n = FIRST_USER_NUMBER
-    for depot, classification, count in CREW_PLAN:
-        for _ in range(count):
-            row = {col: "" for col in header}
-            row.update({"User Id": f"U{n}", "Classification": classification, "Depot": depot})
-            rows.append(row)
-            n += 1
-    return header, rows
+def build_priority(old: Path, activities: list[dict[str, str]]) -> tuple[list[str], list[dict[str, str]]]:
+    """Old priority order with the renames; every work head must appear exactly once."""
+    header, rows = read_csv(old / "activity_priority.csv")
+    heads = [
+        OLD_NAMES.get(r["Activity Head"], r["Activity Head"]) for r in sorted(rows, key=lambda r: int(r["Priority"]))
+    ]
+    work_heads = {a["Activity Head"] for a in activities if a["Activity Type"] not in ("Relief", "Travel")}
+    missing = sorted(work_heads - set(heads))
+    unknown = sorted(set(heads) - work_heads)
+    if missing or unknown:
+        raise SystemExit(f"priority list: missing heads {missing}, unknown heads {unknown}")
+    return header, [{"Priority": str(i), "Activity Head": h} for i, h in enumerate(heads, start=1)]
 
 
-def summarise(activities, demand, crew) -> str:
-    lines = []
+def build_compliance(old: Path, activities: list[dict[str, str]]) -> tuple[list[str], list[dict[str, str]]]:
+    """Old compliance matrix with the renames; old A17 (Route Learning) dropped; Work Train CO copies Work Train."""
+    header, rows = read_csv(old / "compliance_matrix_df.csv")
+    by_id = {a["Activity ID"]: a for a in activities}
+    out = []
+    for r in rows:
+        if r["Activity ID"] == "A17":  # old A17 = Route Learning, removed from the activities
+            continue
+        a = by_id[r["Activity ID"]]
+        row = dict(r, **{"Activity Name": a["Activity Name"], "Activity Head": a["Activity Head"]})
+        for old_name, new_name in OLD_NAMES.items():
+            row["Competency"] = row["Competency"].replace(old_name, new_name)
+        out.append(row)
+        if r["Activity ID"] == "A08":  # Work Train CO needs what Work Train needs
+            co = by_id["A17"]
+            copy = dict(row, **{"Activity ID": "A17", "Activity Name": co["Activity Name"]})
+            if copy["Competency LMS Code"] == "AC-A08":
+                copy.update({"Competency LMS Code": "AC-A17", "Competency": "Work Train CO Sign-off"})
+            out.append(copy)
+    out.sort(key=lambda r: r["Activity ID"])
+    work_ids = {a["Activity ID"] for a in activities if a["Activity Type"] not in ("Relief", "Travel")}
+    missing = sorted(work_ids - {r["Activity ID"] for r in out})
+    if missing:
+        raise SystemExit(f"compliance matrix has no rows for {missing}")
+    return header, out
+
+
+def summarise(activities, demand) -> str:
     depot_of = {a["Activity ID"]: a["Start Depot"] for a in activities}
     per_act: dict[str, int] = defaultdict(int)
     per_depot: dict[str, int] = defaultdict(int)
     for d in demand:
         per_act[f"{d['Activity ID']} {d['Activity Name']}"] += int(d["Demand"])
         per_depot[depot_of[d["Activity ID"]]] += int(d["Demand"])
-    lines.append(f"activities: {len(activities)} rows")
+    lines = [f"activities: {len(activities)} rows"]
     lines.append(f"demand: {len(demand)} rows, {sum(per_act.values())} crew-shifts per day")
-    for k, v in per_act.items():
-        lines.append(f"  {k:32s} {v:3d}")
+    lines += [f"  {k:32s} {v:3d}" for k, v in per_act.items()]
     lines.append("demand per day by start depot: " + ", ".join(f"{k}={v}" for k, v in sorted(per_depot.items())))
-    crew_count = Counter((c["Depot"], c["Classification"]) for c in crew)
-    lines.append(f"crew: {len(crew)} rows " + ", ".join(f"{d}/{c}={n}" for (d, c), n in crew_count.items()))
     return "\n".join(lines)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--data-dir", type=Path, default=DEFAULT_DIR, help="folder holding source/ (default: %(default)s)")
-    args = p.parse_args()
-    source = args.data_dir / "source"
+    args = p.parse_args(argv)
+    out = args.data_dir
+    source = out / "source"
+    old = source / "from_generated_small"
 
     act_header, activities = build_activities(source)
     dem_header, demand = build_demand(activities)
-    crew_header, crew = build_crew(source)
-    roster_header, _ = read_csv(source / "roster_df.csv")
-
-    write_csv(args.data_dir / "activities_df.csv", act_header, activities)
-    write_csv(args.data_dir / "activity_demand_df.csv", dem_header, demand)
-    write_csv(args.data_dir / "crew_master_data_df.csv", crew_header, crew)
-    write_csv(args.data_dir / "roster_df.csv", roster_header, [])
-    print(summarise(activities, demand, crew))
+    write_csv(out / "activities_df.csv", act_header, activities)
+    write_csv(out / "activity_demand_df.csv", dem_header, demand)
+    write_csv(out / "activity_priority.csv", *build_priority(old, activities))
+    write_csv(out / "compliance_matrix_df.csv", *build_compliance(old, activities))
+    write_csv(out / "excluded_activities.csv", ["Activity ID", "Activity Name"], [])
+    write_csv(
+        out / "constraints_df.csv",
+        ["Constraint", "Value", "Status"],
+        [{"Constraint": c, "Value": v, "Status": s} for c, v, s in CONSTRAINTS],
+    )
+    # Per-person tables that stay empty for the initial roster. Keyed by User Id (CM Id is not used).
+    write_csv(
+        out / "crew_restrictions.csv",
+        ["Restriction ID", "User Id", "Restriction Type", "Activity Head", "Effective From", "Effective To", "Reason"],
+        [],
+    )
+    write_csv(out / "Crew_Onsite_App.csv", ["Record ID", "User Id", "Date", "Location", "Status"], [])
+    print(summarise(activities, demand))
 
 
 if __name__ == "__main__":
