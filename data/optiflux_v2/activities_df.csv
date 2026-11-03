@@ -17,3 +17,5 @@ A14,Nelaway Shuttle Driver,Yard,Nelaway Shuttle Driver,Driving,,,Nelaway,Nelaway
 A15,NE Ship,Yard,NE Ship,Shed,,,Haskett,Haskett,No,Shunter;Driver,
 A16,NE Crew,Yard,NE Crew,Crew,,,Haskett,Haskett,No,Driver;Conductor;Shunter,
 A90,Relief,Reserve,Relief,Relief,,,,,No,,
+A91,Travel In,Travel,Travel,Travel,,,,,No,,
+A92,Travel Out,Travel,Travel,Travel,,,,,No,,

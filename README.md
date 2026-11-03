@@ -24,9 +24,9 @@ workbook [`real_data/optiflux_db_template.xlsx`](real_data/README.md) (one
 sheet per table) and pass it to `--instance-dir`.
 
 > **Real-data rules (Nov 2026):** new rules require building the initial roster from demand
-> before gap filling. The updated tables are in [`data/optiflux_v2/`](data/optiflux_v2/README.md); the rules,
-> compared with this model, and the progress so far are in
-> [`Progress/real_data_understanding/`](Progress/real_data_understanding/README.md).
+> before gap filling. The data and the initial roster are in [`data/optiflux_v2/`](data/optiflux_v2/README.md)
+> (`scripts/build_optiflux_v2_data.py`, `scripts/roster_making.py`, `scripts/check_roster.py`). The rules,
+> how the roster is made, and progress so far: [`Progress/real_data_understanding/`](Progress/real_data_understanding/README.md).
 
 > **Status:** research prototype (v0.3). All data in this repository is
 > **synthetic or hand-constructed**. Several operating rules in the briefing
@@ -41,7 +41,7 @@ The problem specification is
 ```bash
 pip install -r requirements.txt
 python scripts/run_example.py                      # briefing ABC example -> outputs/example/
-pytest                                             # 211 tests
+pytest                                             # 228 tests
 ```
 
 ```bash

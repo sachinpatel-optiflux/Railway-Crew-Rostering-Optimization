@@ -1,0 +1,239 @@
+Line ID,Assignment Type,Pattern,Activity IDs,Activity Names,Day Start,Night Start,Classification,Home Depots,Role,Members,Shifts Per Day
+L001,Demand,pair,A06,Madison Crew,03:00,15:00,Residential,Haskett,Driver,U100001;U100002;U100003;U100004,2
+L002,Demand,pair,A06,Madison Crew,04:00,16:00,Residential,Haskett,Conductor,U100005;U100006;U100007;U100008,2
+L003,Demand,pair,A06,Madison Crew,05:00,17:00,Residential,Haskett,Driver,U100009;U100010;U100011;U100012,2
+L004,Demand,pair,A06,Madison Crew,06:00,18:00,Residential,Haskett,Conductor,U100013;U100014;U100015;U100016,2
+L005,Demand,pair,A06,Madison Crew,07:00,19:00,Residential,Haskett,Driver,U100017;U100018;U100019;U100020,2
+L006,Demand,pair,A06,Madison Crew,08:00,20:00,Residential,Haskett,Conductor,U100021;U100022;U100023;U100024,2
+L007,Demand,pair,A06,Madison Crew,09:00,21:00,Residential,Haskett,Driver,U100025;U100026;U100027;U100028,2
+L008,Demand,pair,A06,Madison Crew,10:00,22:00,Residential,Haskett,Conductor,U100029;U100030;U100031;U100032,2
+L009,Demand,pair,A06,Madison Crew,11:00,23:00,Residential,Haskett,Driver,U100033;U100034;U100035;U100036,2
+L010,Demand,pair,A06,Madison Crew,12:00,00:00,Residential,Haskett,Conductor,U100037;U100038;U100039;U100040,2
+L011,Demand,pair,A06,Madison Crew,13:00,01:00,Residential,Haskett,Driver,U100041;U100042;U100043;U100044,2
+L012,Demand,pair,A06,Madison Crew,14:00,02:00,Residential,Haskett,Conductor,U100045;U100046;U100047;U100048,2
+L013,Excess,pair,A06,Madison Crew,06:00,18:00,Residential,Haskett,Driver,U100049;U100050;U100051;U100052,2
+L014,Excess,pair,A06,Madison Crew,12:00,00:00,Residential,Haskett,Conductor,U100053;U100054;U100055;U100056,2
+L015,Demand,pair,A16,NE Crew,04:00,16:00,Residential,Haskett,Driver,U100057;U100058;U100059;U100060,2
+L016,Demand,pair,A16,NE Crew,04:00,16:00,Residential,Haskett,Conductor,U100061;U100062;U100063;U100064,2
+L017,Demand,pair,A16,NE Crew,04:00,16:00,Residential,Haskett,Shunter,U100065;U100066;U100067;U100068,2
+L018,Demand,pair,A16,NE Crew,04:00,16:00,Residential,Haskett,Driver,U100069;U100070;U100071;U100072,2
+L019,Demand,pair,A16,NE Crew,07:00,19:00,Residential,Haskett,Conductor,U100073;U100074;U100075;U100076,2
+L020,Demand,pair,A16,NE Crew,07:00,19:00,Residential,Haskett,Shunter,U100077;U100078;U100079;U100080,2
+L021,Demand,pair,A16,NE Crew,07:00,19:00,Residential,Haskett,Driver,U100081;U100082;U100083;U100084,2
+L022,Demand,pair,A16,NE Crew,07:00,19:00,Residential,Haskett,Conductor,U100085;U100086;U100087;U100088,2
+L023,Demand,pair,A16,NE Crew,09:00,21:00,Residential,Haskett,Shunter,U100089;U100090;U100091;U100092,2
+L024,Demand,pair,A16,NE Crew,09:00,21:00,Residential,Haskett,Driver,U100093;U100094;U100095;U100096,2
+L025,Demand,pair,A16,NE Crew,09:00,21:00,Residential,Haskett,Conductor,U100097;U100098;U100099;U100100,2
+L026,Demand,pair,A16,NE Crew,09:00,21:00,Residential,Haskett,Shunter,U100101;U100102;U100103;U100104,2
+L027,Demand,pair,A16,NE Crew,12:00,00:00,Residential,Haskett,Driver,U100105;U100106;U100107;U100108,2
+L028,Demand,pair,A16,NE Crew,12:00,00:00,Residential,Haskett,Conductor,U100109;U100110;U100111;U100112,2
+L029,Excess,pair,A16,NE Crew,04:00,16:00,Residential,Haskett,Shunter,U100113;U100114;U100115;U100116,2
+L030,Excess,pair,A16,NE Crew,09:00,21:00,Residential,Haskett,Driver,U100117;U100118;U100119;U100120,2
+L031,Demand,single,A10,Fuel Return,10:00,,Residential,Haskett,Driver,U100121;U100122,1
+L032,Demand,pair,A11,Bethway Join/FI Crew,04:00,16:00,Residential,Haskett,Driver,U100123;U100124;U100125;U100126,2
+L033,Demand,pair,A11,Bethway Join/FI Crew,07:00,19:00,Residential,Haskett,Conductor,U100127;U100128;U100129;U100130,2
+L034,Demand,pair,A11,Bethway Join/FI Crew,10:00,22:00,Residential,Haskett,Shunter,U100131;U100132;U100133;U100134,2
+L035,Demand,pair,A11,Bethway Join/FI Crew,13:00,01:00,Residential,Haskett,Driver,U100135;U100136;U100137;U100138,2
+L036,Excess,pair,A11,Bethway Join/FI Crew,10:00,22:00,Residential,Haskett,Conductor,U100139;U100140;U100141;U100142,2
+L037,Demand,pair,A14,Nelaway Shuttle Driver,04:00,16:00,Residential,Nelaway,Driver,U100143;U100144;U100145;U100146,2
+L038,Demand,pair,A14,Nelaway Shuttle Driver,07:00,19:00,Residential,Nelaway,Driver,U100147;U100148;U100149;U100150,2
+L039,Demand,pair,A14,Nelaway Shuttle Driver,10:00,22:00,Residential,Nelaway,Driver,U100151;U100152;U100153;U100154,2
+L040,Demand,pair,A14,Nelaway Shuttle Driver,13:00,01:00,Residential,Nelaway,Driver,U100155;U100156;U100157;U100158,2
+L041,Excess,pair,A14,Nelaway Shuttle Driver,10:00,22:00,Residential,Nelaway,Driver,U100159;U100160;U100161;U100162,2
+L042,Demand,pair,A15,NE Ship,04:00,16:00,Residential,Haskett,Shunter,U100163;U100164;U100165;U100166,2
+L043,Demand,pair,A15,NE Ship,09:00,21:00,Residential,Haskett,Driver,U100167;U100168;U100169;U100170,2
+L044,Excess,pair,A15,NE Ship,09:00,21:00,Residential,Haskett,Shunter,U100171;U100172;U100173;U100174,2
+L045,Demand,pair,A13,Nelaway Driver,03:00,15:00,Residential,Nelaway,Driver,U100175;U100176;U100177;U100178,2
+L046,Demand,pair,A13,Nelaway Driver,04:00,16:00,Residential,Nelaway,Driver,U100179;U100180;U100181;U100182,2
+L047,Demand,pair,A13,Nelaway Driver,05:00,17:00,Residential,Nelaway,Driver,U100183;U100184;U100185;U100186,2
+L048,Demand,pair,A13,Nelaway Driver,06:00,18:00,Residential,Nelaway,Driver,U100187;U100188;U100189;U100190,2
+L049,Demand,pair,A13,Nelaway Driver,07:00,19:00,Residential,Nelaway,Driver,U100191;U100192;U100193;U100194,2
+L050,Demand,pair,A13,Nelaway Driver,08:00,20:00,Residential,Nelaway,Driver,U100195;U100196;U100197;U100198,2
+L051,Demand,pair,A13,Nelaway Driver,09:00,21:00,Residential,Nelaway,Driver,U100199;U100200;U100201;U100202,2
+L052,Demand,pair,A13,Nelaway Driver,10:00,22:00,Residential,Nelaway,Driver,U100203;U100204;U100205;U100206,2
+L053,Demand,pair,A13,Nelaway Driver,11:00,23:00,Residential,Nelaway,Driver,U100207;U100208;U100209;U100210,2
+L054,Demand,pair,A13,Nelaway Driver,12:00,00:00,Residential,Nelaway,Driver,U100211;U100212;U100213;U100214,2
+L055,Demand,pair,A13,Nelaway Driver,13:00,01:00,Residential,Nelaway,Driver,U100215;U100216;U100217;U100218,2
+L056,Demand,pair,A13,Nelaway Driver,14:00,02:00,Residential,Nelaway,Driver,U100219;U100220;U100221;U100222,2
+L057,Excess,pair,A13,Nelaway Driver,06:00,18:00,Residential,Nelaway,Driver,U100223;U100224;U100225;U100226,2
+L058,Excess,pair,A13,Nelaway Driver,12:00,00:00,Residential,Nelaway,Driver,U100227;U100228;U100229;U100230,2
+L059,Demand,single,A09,Fuel Train,10:00,,Residential,Haskett,Driver,U100231;U100232,1
+L060,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,03:00,15:00,FIFO,Haskett;Yarmouth,Driver,U100233;U100234;U100235;U100236;U100237;U100238;U100239;U100240,4
+L061,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,04:00,16:00,FIFO,Haskett;Yarmouth,Driver,U100241;U100242;U100243;U100244;U100245;U100246;U100247;U100248,4
+L062,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,05:00,17:00,FIFO,Haskett;Yarmouth,Driver,U100249;U100250;U100251;U100252;U100253;U100254;U100255;U100256,4
+L063,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,06:00,18:00,FIFO,Haskett;Yarmouth,Driver,U100257;U100258;U100259;U100260;U100261;U100262;U100263;U100264,4
+L064,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,07:00,19:00,FIFO,Haskett;Yarmouth,Driver,U100265;U100266;U100267;U100268;U100269;U100270;U100271;U100272,4
+L065,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,08:00,20:00,FIFO,Haskett;Yarmouth,Driver,U100273;U100274;U100275;U100276;U100277;U100278;U100279;U100280,4
+L066,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,09:00,21:00,FIFO,Haskett;Yarmouth,Driver,U100281;U100282;U100283;U100284;U100285;U100286;U100287;U100288,4
+L067,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,10:00,22:00,FIFO,Haskett;Yarmouth,Driver,U100289;U100290;U100291;U100292;U100293;U100294;U100295;U100296,4
+L068,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,11:00,23:00,FIFO,Haskett;Yarmouth,Driver,U100297;U100298;U100299;U100300;U100301;U100302;U100303;U100304,4
+L069,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,12:00,00:00,FIFO,Haskett;Yarmouth,Driver,U100305;U100306;U100307;U100308;U100309;U100310;U100311;U100312,4
+L070,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,13:00,01:00,FIFO,Haskett;Yarmouth,Driver,U100313;U100314;U100315;U100316;U100317;U100318;U100319;U100320,4
+L071,Demand,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,14:00,02:00,FIFO,Haskett;Yarmouth,Driver,U100321;U100322;U100323;U100324;U100325;U100326;U100327;U100328,4
+L072,Excess,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,06:00,18:00,FIFO,Haskett;Yarmouth,Driver,U100329;U100330;U100331;U100332;U100333;U100334;U100335;U100336,4
+L073,Excess,two-way pair,A01;A03,Haskett Mainline;Yarmouth Mainline,12:00,00:00,FIFO,Haskett;Yarmouth,Driver,U100337;U100338;U100339;U100340;U100341;U100342;U100343;U100344,4
+L074,Demand,single,A02,Haskett Mainline CO,,17:00,FIFO,Haskett,Driver,U100345;U100346,1
+L075,Demand,pair,A05,CAM LOT,03:00,15:00,FIFO,Yarmouth,Driver,U100347;U100348;U100349;U100350,2
+L076,Demand,pair,A05,CAM LOT,06:00,18:00,FIFO,Yarmouth,Shunter,U100351;U100352;U100353;U100354,2
+L077,Demand,pair,A05,CAM LOT,09:00,21:00,FIFO,Yarmouth,Driver,U100355;U100356;U100357;U100358,2
+L078,Demand,pair,A05,CAM LOT,12:00,00:00,FIFO,Yarmouth,Shunter,U100359;U100360;U100361;U100362,2
+L079,Excess,pair,A05,CAM LOT,09:00,21:00,FIFO,Yarmouth,Driver,U100363;U100364;U100365;U100366,2
+L080,Demand,pair,A07,Madison Yard,04:00,16:00,Residential,Haskett,Shunter,U100367;U100368;U100369;U100370,2
+L081,Demand,pair,A07,Madison Yard,07:00,19:00,Residential,Haskett,Driver,U100371;U100372;U100373;U100374,2
+L082,Demand,pair,A07,Madison Yard,10:00,22:00,Residential,Haskett,Shunter,U100375;U100376;U100377;U100378,2
+L083,Demand,pair,A07,Madison Yard,13:00,01:00,Residential,Haskett,Driver,U100379;U100380;U100381;U100382,2
+L084,Excess,pair,A07,Madison Yard,10:00,22:00,Residential,Haskett,Shunter,U100383;U100384;U100385;U100386,2
+L085,Demand,shuttle,A08;A03,Work Train;Yarmouth Mainline,,22:00,FIFO,Haskett;Yarmouth,Driver,U100387;U100388;U100389;U100390,1
+L086,Demand,shuttle,A08;A03,Work Train;Yarmouth Mainline,,22:00,FIFO,Haskett;Yarmouth,Driver,U100391;U100392;U100393;U100394,1
+L087,Demand,pair,A04,Yarmouth Mainline CO,05:00,17:00,FIFO,Yarmouth,Driver,U100395;U100396;U100397;U100398,2
+L088,Excess,pair,A04,Yarmouth Mainline CO,05:00,17:00,FIFO,Yarmouth,Conductor,U100399;U100400;U100401;U100402,2
+L089,Demand,pair,A12,BY Ship,04:00,16:00,Residential,Haskett,Shunter,U100403;U100404;U100405;U100406,2
+L090,Demand,pair,A12,BY Ship,09:00,21:00,Residential,Haskett,Driver,U100407;U100408;U100409;U100410,2
+L091,Excess,pair,A12,BY Ship,09:00,21:00,Residential,Haskett,Shunter,U100411;U100412;U100413;U100414,2
+L092,Relief,pair,A90,Relief,03:00,15:00,Residential,Haskett,Driver,U100415;U100416;U100417;U100418,2
+L093,Relief,pair,A90,Relief,08:00,20:00,Residential,Haskett,Driver,U100419;U100420;U100421;U100422,2
+L094,Relief,pair,A90,Relief,13:00,01:00,Residential,Haskett,Driver,U100423;U100424;U100425;U100426,2
+L095,Relief,pair,A90,Relief,06:00,18:00,Residential,Haskett,Driver,U100427;U100428;U100429;U100430,2
+L096,Relief,pair,A90,Relief,11:00,23:00,Residential,Haskett,Driver,U100431;U100432;U100433;U100434,2
+L097,Relief,pair,A90,Relief,04:00,16:00,Residential,Haskett,Driver,U100435;U100436;U100437;U100438,2
+L098,Relief,pair,A90,Relief,09:00,21:00,Residential,Haskett,Driver,U100439;U100440;U100441;U100442,2
+L099,Relief,pair,A90,Relief,14:00,02:00,Residential,Haskett,Driver,U100443;U100444;U100445;U100446,2
+L100,Relief,pair,A90,Relief,07:00,19:00,Residential,Haskett,Driver,U100447;U100448;U100449;U100450,2
+L101,Relief,pair,A90,Relief,12:00,00:00,Residential,Haskett,Driver,U100451;U100452;U100453;U100454,2
+L102,Relief,pair,A90,Relief,05:00,17:00,Residential,Haskett,Driver,U100455;U100456;U100457;U100458,2
+L103,Relief,pair,A90,Relief,10:00,22:00,Residential,Haskett,Driver,U100459;U100460;U100461;U100462,2
+L104,Relief,pair,A90,Relief,03:00,15:00,Residential,Haskett,Driver,U100463;U100464;U100465;U100466,2
+L105,Relief,pair,A90,Relief,08:00,20:00,Residential,Haskett,Driver,U100467;U100468;U100469;U100470,2
+L106,Relief,pair,A90,Relief,13:00,01:00,Residential,Haskett,Driver,U100471;U100472;U100473;U100474,2
+L107,Relief,pair,A90,Relief,06:00,18:00,Residential,Haskett,Driver,U100475;U100476;U100477;U100478,2
+L108,Relief,pair,A90,Relief,11:00,23:00,Residential,Haskett,Driver,U100479;U100480;U100481;U100482,2
+L109,Relief,pair,A90,Relief,04:00,16:00,Residential,Haskett,Driver,U100483;U100484;U100485;U100486,2
+L110,Relief,pair,A90,Relief,09:00,21:00,Residential,Haskett,Driver,U100487;U100488;U100489;U100490,2
+L111,Relief,pair,A90,Relief,14:00,02:00,Residential,Haskett,Driver,U100491;U100492;U100493;U100494,2
+L112,Relief,pair,A90,Relief,07:00,19:00,Residential,Haskett,Driver,U100495;U100496;U100497;U100498,2
+L113,Relief,pair,A90,Relief,12:00,00:00,Residential,Haskett,Driver,U100499;U100500;U100501;U100502,2
+L114,Relief,pair,A90,Relief,05:00,17:00,Residential,Haskett,Driver,U100503;U100504;U100505;U100506,2
+L115,Relief,pair,A90,Relief,10:00,22:00,Residential,Haskett,Driver,U100507;U100508;U100509;U100510,2
+L116,Relief,pair,A90,Relief,03:00,15:00,Residential,Haskett,Driver,U100511;U100512;U100513;U100514,2
+L117,Relief,pair,A90,Relief,08:00,20:00,Residential,Haskett,Driver,U100515;U100516;U100517;U100518,2
+L118,Relief,pair,A90,Relief,13:00,01:00,Residential,Haskett,Driver,U100519;U100520;U100521;U100522,2
+L119,Relief,pair,A90,Relief,06:00,18:00,Residential,Haskett,Driver,U100523;U100524;U100525;U100526,2
+L120,Relief,pair,A90,Relief,03:00,15:00,FIFO,Haskett,Driver,U100527;U100528;U100529;U100530,2
+L121,Relief,pair,A90,Relief,08:00,20:00,FIFO,Haskett,Driver,U100531;U100532;U100533;U100534,2
+L122,Relief,pair,A90,Relief,13:00,01:00,FIFO,Haskett,Driver,U100535;U100536;U100537;U100538,2
+L123,Relief,pair,A90,Relief,06:00,18:00,FIFO,Haskett,Driver,U100539;U100540;U100541;U100542,2
+L124,Relief,pair,A90,Relief,11:00,23:00,FIFO,Haskett,Driver,U100543;U100544;U100545;U100546,2
+L125,Relief,pair,A90,Relief,04:00,16:00,FIFO,Haskett,Driver,U100547;U100548;U100549;U100550,2
+L126,Relief,pair,A90,Relief,09:00,21:00,FIFO,Haskett,Driver,U100551;U100552;U100553;U100554,2
+L127,Relief,pair,A90,Relief,14:00,02:00,FIFO,Haskett,Driver,U100555;U100556;U100557;U100558,2
+L128,Relief,pair,A90,Relief,07:00,19:00,FIFO,Haskett,Driver,U100559;U100560;U100561;U100562,2
+L129,Relief,single,A90,Relief,12:00,,FIFO,Haskett,Driver,U100563;U100564,1
+L130,Relief,pair,A90,Relief,03:00,15:00,FIFO,Yarmouth,Driver,U100565;U100566;U100567;U100568,2
+L131,Relief,pair,A90,Relief,08:00,20:00,FIFO,Yarmouth,Driver,U100569;U100570;U100571;U100572,2
+L132,Relief,pair,A90,Relief,13:00,01:00,FIFO,Yarmouth,Driver,U100573;U100574;U100575;U100576,2
+L133,Relief,pair,A90,Relief,06:00,18:00,FIFO,Yarmouth,Driver,U100577;U100578;U100579;U100580,2
+L134,Relief,pair,A90,Relief,11:00,23:00,FIFO,Yarmouth,Driver,U100581;U100582;U100583;U100584,2
+L135,Relief,pair,A90,Relief,04:00,16:00,FIFO,Yarmouth,Driver,U100585;U100586;U100587;U100588,2
+L136,Relief,pair,A90,Relief,09:00,21:00,FIFO,Yarmouth,Driver,U100589;U100590;U100591;U100592,2
+L137,Relief,pair,A90,Relief,14:00,02:00,FIFO,Yarmouth,Driver,U100593;U100594;U100595;U100596,2
+L138,Relief,pair,A90,Relief,07:00,19:00,FIFO,Yarmouth,Driver,U100597;U100598;U100599;U100600,2
+L139,Relief,pair,A90,Relief,12:00,00:00,FIFO,Yarmouth,Driver,U100601;U100602;U100603;U100604,2
+L140,Relief,pair,A90,Relief,05:00,17:00,FIFO,Yarmouth,Driver,U100605;U100606;U100607;U100608,2
+L141,Relief,pair,A90,Relief,10:00,22:00,FIFO,Yarmouth,Driver,U100609;U100610;U100611;U100612,2
+L142,Relief,pair,A90,Relief,03:00,15:00,FIFO,Yarmouth,Driver,U100613;U100614;U100615;U100616,2
+L143,Relief,pair,A90,Relief,08:00,20:00,FIFO,Yarmouth,Driver,U100617;U100618;U100619;U100620,2
+L144,Relief,pair,A90,Relief,13:00,01:00,FIFO,Yarmouth,Driver,U100621;U100622;U100623;U100624,2
+L145,Relief,pair,A90,Relief,06:00,18:00,FIFO,Yarmouth,Driver,U100625;U100626;U100627;U100628,2
+L146,Relief,pair,A90,Relief,11:00,23:00,FIFO,Yarmouth,Driver,U100629;U100630;U100631;U100632,2
+L147,Relief,pair,A90,Relief,04:00,16:00,FIFO,Yarmouth,Driver,U100633;U100634;U100635;U100636,2
+L148,Relief,pair,A90,Relief,09:00,21:00,FIFO,Yarmouth,Driver,U100637;U100638;U100639;U100640,2
+L149,Relief,pair,A90,Relief,14:00,02:00,FIFO,Yarmouth,Driver,U100641;U100642;U100643;U100644,2
+L150,Relief,pair,A90,Relief,07:00,19:00,FIFO,Yarmouth,Driver,U100645;U100646;U100647;U100648,2
+L151,Relief,pair,A90,Relief,12:00,00:00,FIFO,Yarmouth,Driver,U100649;U100650;U100651;U100652,2
+L152,Relief,pair,A90,Relief,05:00,17:00,FIFO,Yarmouth,Driver,U100653;U100654;U100655;U100656,2
+L153,Relief,pair,A90,Relief,10:00,22:00,FIFO,Yarmouth,Driver,U100657;U100658;U100659;U100660,2
+L154,Relief,pair,A90,Relief,03:00,15:00,FIFO,Yarmouth,Driver,U100661;U100662;U100663;U100664,2
+L155,Relief,pair,A90,Relief,08:00,20:00,FIFO,Yarmouth,Driver,U100665;U100666;U100667;U100668,2
+L156,Relief,pair,A90,Relief,13:00,01:00,FIFO,Yarmouth,Driver,U100669;U100670;U100671;U100672,2
+L157,Relief,pair,A90,Relief,06:00,18:00,FIFO,Yarmouth,Driver,U100673;U100674;U100675;U100676,2
+L158,Relief,pair,A90,Relief,11:00,23:00,FIFO,Yarmouth,Driver,U100677;U100678;U100679;U100680,2
+L159,Relief,pair,A90,Relief,04:00,16:00,FIFO,Yarmouth,Driver,U100681;U100682;U100683;U100684,2
+L160,Relief,pair,A90,Relief,09:00,21:00,FIFO,Yarmouth,Driver,U100685;U100686;U100687;U100688,2
+L161,Relief,pair,A90,Relief,14:00,02:00,FIFO,Yarmouth,Driver,U100689;U100690;U100691;U100692,2
+L162,Relief,pair,A90,Relief,07:00,19:00,FIFO,Yarmouth,Driver,U100693;U100694;U100695;U100696,2
+L163,Relief,pair,A90,Relief,12:00,00:00,FIFO,Yarmouth,Driver,U100697;U100698;U100699;U100700,2
+L164,Relief,pair,A90,Relief,05:00,17:00,FIFO,Yarmouth,Driver,U100701;U100702;U100703;U100704,2
+L165,Relief,pair,A90,Relief,10:00,22:00,FIFO,Yarmouth,Driver,U100705;U100706;U100707;U100708,2
+L166,Relief,pair,A90,Relief,03:00,15:00,FIFO,Yarmouth,Driver,U100709;U100710;U100711;U100712,2
+L167,Relief,pair,A90,Relief,08:00,20:00,FIFO,Yarmouth,Driver,U100713;U100714;U100715;U100716,2
+L168,Relief,pair,A90,Relief,13:00,01:00,FIFO,Yarmouth,Driver,U100717;U100718;U100719;U100720,2
+L169,Relief,pair,A90,Relief,06:00,18:00,FIFO,Yarmouth,Driver,U100721;U100722;U100723;U100724,2
+L170,Relief,pair,A90,Relief,11:00,23:00,FIFO,Yarmouth,Driver,U100725;U100726;U100727;U100728,2
+L171,Relief,pair,A90,Relief,04:00,16:00,FIFO,Yarmouth,Driver,U100729;U100730;U100731;U100732,2
+L172,Relief,pair,A90,Relief,09:00,21:00,FIFO,Yarmouth,Driver,U100733;U100734;U100735;U100736,2
+L173,Relief,pair,A90,Relief,14:00,02:00,FIFO,Yarmouth,Driver,U100737;U100738;U100739;U100740,2
+L174,Relief,pair,A90,Relief,07:00,19:00,FIFO,Yarmouth,Driver,U100741;U100742;U100743;U100744,2
+L175,Relief,pair,A90,Relief,12:00,00:00,FIFO,Yarmouth,Driver,U100745;U100746;U100747;U100748,2
+L176,Relief,pair,A90,Relief,05:00,17:00,FIFO,Yarmouth,Driver,U100749;U100750;U100751;U100752,2
+L177,Relief,pair,A90,Relief,10:00,22:00,FIFO,Yarmouth,Driver,U100753;U100754;U100755;U100756,2
+L178,Relief,pair,A90,Relief,03:00,15:00,FIFO,Yarmouth,Driver,U100757;U100758;U100759;U100760,2
+L179,Relief,pair,A90,Relief,08:00,20:00,FIFO,Yarmouth,Driver,U100761;U100762;U100763;U100764,2
+L180,Relief,pair,A90,Relief,13:00,01:00,FIFO,Yarmouth,Driver,U100765;U100766;U100767;U100768,2
+L181,Relief,pair,A90,Relief,06:00,18:00,FIFO,Yarmouth,Driver,U100769;U100770;U100771;U100772,2
+L182,Relief,pair,A90,Relief,11:00,23:00,FIFO,Yarmouth,Driver,U100773;U100774;U100775;U100776,2
+L183,Relief,pair,A90,Relief,03:00,15:00,Residential,Nelaway,Driver,U100777;U100778;U100779;U100780,2
+L184,Relief,pair,A90,Relief,08:00,20:00,Residential,Nelaway,Driver,U100781;U100782;U100783;U100784,2
+L185,Relief,pair,A90,Relief,13:00,01:00,Residential,Nelaway,Driver,U100785;U100786;U100787;U100788,2
+L186,Relief,pair,A90,Relief,06:00,18:00,Residential,Nelaway,Driver,U100789;U100790;U100791;U100792,2
+L187,Relief,pair,A90,Relief,11:00,23:00,Residential,Nelaway,Driver,U100793;U100794;U100795;U100796,2
+L188,Relief,pair,A90,Relief,04:00,16:00,Residential,Nelaway,Driver,U100797;U100798;U100799;U100800,2
+L189,Relief,pair,A90,Relief,09:00,21:00,Residential,Nelaway,Driver,U100801;U100802;U100803;U100804,2
+L190,Relief,pair,A90,Relief,14:00,02:00,Residential,Nelaway,Driver,U100805;U100806;U100807;U100808,2
+L191,Relief,pair,A90,Relief,07:00,19:00,Residential,Nelaway,Driver,U100809;U100810;U100811;U100812,2
+L192,Relief,pair,A90,Relief,12:00,00:00,Residential,Nelaway,Driver,U100813;U100814;U100815;U100816,2
+L193,Relief,pair,A90,Relief,05:00,17:00,Residential,Nelaway,Driver,U100817;U100818;U100819;U100820,2
+L194,Relief,pair,A90,Relief,10:00,22:00,Residential,Nelaway,Driver,U100821;U100822;U100823;U100824,2
+L195,Relief,pair,A90,Relief,03:00,15:00,Residential,Nelaway,Driver,U100825;U100826;U100827;U100828,2
+L196,Relief,pair,A90,Relief,08:00,20:00,Residential,Nelaway,Driver,U100829;U100830;U100831;U100832,2
+L197,Relief,pair,A90,Relief,13:00,01:00,Residential,Nelaway,Driver,U100833;U100834;U100835;U100836,2
+L198,Relief,pair,A90,Relief,06:00,18:00,Residential,Nelaway,Driver,U100837;U100838;U100839;U100840,2
+L199,Relief,pair,A90,Relief,11:00,23:00,Residential,Nelaway,Driver,U100841;U100842;U100843;U100844,2
+L200,Relief,pair,A90,Relief,04:00,16:00,Residential,Nelaway,Driver,U100845;U100846;U100847;U100848,2
+L201,Relief,pair,A90,Relief,09:00,21:00,Residential,Nelaway,Driver,U100849;U100850;U100851;U100852,2
+L202,Relief,pair,A90,Relief,14:00,02:00,Residential,Nelaway,Driver,U100853;U100854;U100855;U100856,2
+L203,Relief,pair,A90,Relief,07:00,19:00,Residential,Nelaway,Driver,U100857;U100858;U100859;U100860,2
+L204,Relief,pair,A90,Relief,12:00,00:00,Residential,Nelaway,Driver,U100861;U100862;U100863;U100864,2
+L205,Relief,pair,A90,Relief,05:00,17:00,Residential,Nelaway,Driver,U100865;U100866;U100867;U100868,2
+L206,Relief,pair,A90,Relief,10:00,22:00,Residential,Nelaway,Driver,U100869;U100870;U100871;U100872,2
+L207,Relief,pair,A90,Relief,03:00,15:00,Residential,Nelaway,Driver,U100873;U100874;U100875;U100876,2
+L208,Relief,pair,A90,Relief,08:00,20:00,Residential,Nelaway,Driver,U100877;U100878;U100879;U100880,2
+L209,Relief,pair,A90,Relief,13:00,01:00,Residential,Nelaway,Driver,U100881;U100882;U100883;U100884,2
+L210,Relief,pair,A90,Relief,06:00,18:00,Residential,Nelaway,Driver,U100885;U100886;U100887;U100888,2
+L211,Relief,pair,A90,Relief,11:00,23:00,Residential,Nelaway,Driver,U100889;U100890;U100891;U100892,2
+L212,Relief,pair,A90,Relief,04:00,16:00,Residential,Nelaway,Driver,U100893;U100894;U100895;U100896,2
+L213,Relief,pair,A90,Relief,09:00,21:00,Residential,Nelaway,Driver,U100897;U100898;U100899;U100900,2
+L214,Relief,pair,A90,Relief,03:00,15:00,FIFO,Nelaway,Driver,U100901;U100902;U100903;U100904,2
+L215,Relief,pair,A90,Relief,08:00,20:00,FIFO,Nelaway,Driver,U100905;U100906;U100907;U100908,2
+L216,Relief,pair,A90,Relief,13:00,01:00,FIFO,Nelaway,Driver,U100909;U100910;U100911;U100912,2
+L217,Relief,pair,A90,Relief,06:00,18:00,FIFO,Nelaway,Driver,U100913;U100914;U100915;U100916,2
+L218,Relief,pair,A90,Relief,11:00,23:00,FIFO,Nelaway,Driver,U100917;U100918;U100919;U100920,2
+L219,Relief,pair,A90,Relief,04:00,16:00,FIFO,Nelaway,Driver,U100921;U100922;U100923;U100924,2
+L220,Relief,pair,A90,Relief,09:00,21:00,FIFO,Nelaway,Driver,U100925;U100926;U100927;U100928,2
+L221,Relief,pair,A90,Relief,14:00,02:00,FIFO,Nelaway,Driver,U100929;U100930;U100931;U100932,2
+L222,Relief,pair,A90,Relief,07:00,19:00,FIFO,Nelaway,Driver,U100933;U100934;U100935;U100936,2
+L223,Relief,pair,A90,Relief,12:00,00:00,FIFO,Nelaway,Driver,U100937;U100938;U100939;U100940,2
+L224,Relief,pair,A90,Relief,05:00,17:00,FIFO,Nelaway,Driver,U100941;U100942;U100943;U100944,2
+L225,Relief,pair,A90,Relief,10:00,22:00,FIFO,Nelaway,Driver,U100945;U100946;U100947;U100948,2
+L226,Relief,pair,A90,Relief,03:00,15:00,FIFO,Nelaway,Driver,U100949;U100950;U100951;U100952,2
+L227,Relief,pair,A90,Relief,08:00,20:00,FIFO,Nelaway,Driver,U100953;U100954;U100955;U100956,2
+L228,Relief,pair,A90,Relief,13:00,01:00,FIFO,Nelaway,Driver,U100957;U100958;U100959;U100960,2
+L229,Relief,pair,A90,Relief,06:00,18:00,FIFO,Nelaway,Driver,U100961;U100962;U100963;U100964,2
+L230,Relief,pair,A90,Relief,11:00,23:00,FIFO,Nelaway,Driver,U100965;U100966;U100967;U100968,2
+L231,Relief,pair,A90,Relief,04:00,16:00,FIFO,Nelaway,Driver,U100969;U100970;U100971;U100972,2
+L232,Relief,pair,A90,Relief,09:00,21:00,FIFO,Nelaway,Driver,U100973;U100974;U100975;U100976,2
+L233,Relief,pair,A90,Relief,14:00,02:00,FIFO,Nelaway,Driver,U100977;U100978;U100979;U100980,2
+L234,Relief,pair,A90,Relief,07:00,19:00,FIFO,Nelaway,Driver,U100981;U100982;U100983;U100984,2
+L235,Relief,pair,A90,Relief,12:00,00:00,FIFO,Nelaway,Driver,U100985;U100986;U100987;U100988,2
+L236,Relief,pair,A90,Relief,05:00,17:00,FIFO,Nelaway,Driver,U100989;U100990;U100991;U100992,2
+L237,Relief,pair,A90,Relief,10:00,22:00,FIFO,Nelaway,Driver,U100993;U100994;U100995;U100996,2
+L238,Relief,pair,A90,Relief,03:00,15:00,FIFO,Nelaway,Driver,U100997;U100998;U100999;U101000,2

@@ -8,10 +8,15 @@ Sources (unchanged copies in `data/optiflux_v2/source/rules/`):
 in `docs/assumptions_and_open_questions.md` and `docs/db_schema.md`.
 
 **Where enforced:**
-- **Data**: already applied to `data/optiflux_v2/` (see `03_data_changes.md`).
-- **Roster gen**: must be enforced by the initial-roster generator (next step).
-- **Recovery**: applies to phase 2 (remove ~10 %, refill).
+- **Data**: applied to the tables in `data/optiflux_v2/` (see `03_data_changes.md`).
+- **Roster gen**: enforced by `scripts/roster_making.py` (see `05_roster_generation.md`).
+- **Recovery**: applies to phase 2 (remove ~10 %, refill). Not built yet.
 - **Deferred**: postponed by request.
+
+**Status (initial roster):** every Data and Roster gen rule below is met.
+`scripts/check_roster.py` checks each one; results are in
+`data/optiflux_v2/roster_checks.md` (34/34 pass). The table at the end of
+`05_roster_generation.md` maps each rule to the check.
 
 ---
 
@@ -28,16 +33,16 @@ in `docs/assumptions_and_open_questions.md` and `docs/db_schema.md`.
 
 | ID | New rule | Previous model | Where enforced |
 |---|---|---|---|
-| C1 | `Classification` holds **Residential** or **FIFO**. | `Classification` held Permanent / Relief / Excess; Residential / FIFO / Line sat in `Position` and were informational. The briefing linked FIFO ↔ Relief (14/14) and Residential ↔ Excess (6/6). | Data |
-| G5 | **Excess** = a person assigned to an activity when the demand needs fewer people than are assigned (surplus on an activity). | Excess was a crew type: rostered at a fixed time, ±1 h lift-up/layback, 6 on / 6 off. | Roster gen (mark surplus assignments) |
-| G6 | **Relief** = extra people not assigned to any activity; their roster rows have Activity Name = Activity Head = `Relief`. | Relief was a crew type (any start time, 14 on / 14 off) shown by `Relief Standby` rows (CRT-9001, head `Relief`). | Data (activity A90 `Relief` added) + Roster gen |
+| C1 | `Classification` holds **Residential** or **FIFO**. Person tables use `User Id` (no `CM Id`). | `Classification` held Permanent / Relief / Excess; Residential / FIFO / Line sat in `Position` and were informational. The briefing linked FIFO ↔ Relief (14/14) and Residential ↔ Excess (6/6). | Data |
+| G5 | **Excess** = a person assigned to an activity when the demand needs fewer people than are assigned (surplus on an activity). | Excess was a crew type: rostered at a fixed time, ±1 h lift-up/layback, 6 on / 6 off. | Roster gen (`Assignment Type = Excess`: extra teams on ~10 % of lines, and Work Train return trips) |
+| G6 | **Relief** = extra people not assigned to any activity; their roster rows have Activity Name = Activity Head = `Relief`. | Relief was a crew type (any start time, 14 on / 14 off) shown by `Relief Standby` rows (CRT-9001, head `Relief`). | Data (activity A90 `Relief`) + Roster gen (everyone not needed for Demand/Excess) |
 | G7 | If an **Excess** person takes leave, no gap is created (they were surplus). | Absence of any optimised crew removed availability only. | Recovery (Excess leave is not a gap to fill) |
 | G8 | Find Relief or Excess people who can be **reassigned** to gaps. | Same intent as the current model. | Recovery |
 
 Consequence: Relief/Excess is no longer a property of the person. The same
 person can be on an activity one day, Excess another day and Relief another.
-The swing patterns (14/14, 6/6) are not restated by the new rules; see Q3 in
-`04_open_questions.md`.
+The swing patterns (14/14, 6/6) are not restated by the new rules; they are
+kept (Q3 in `04_open_questions.md`).
 
 ## C. FIFO and Residential rules
 
@@ -48,10 +53,9 @@ The swing patterns (14/14, 6/6) are not restated by the new rules; see Q3 in
 | F3 | For now, set travel times **randomly** (within F2). | — | Roster gen |
 | R1 | For **Residential** crew the **first shift must be a day shift**. | Day/night only mattered for the 23 h transition rest; a day shift was one starting 03:00–15:00 (an assumption). | Roster gen; needs the day-shift definition (Q4) |
 
-Travel times depend on the generated shifts, so they cannot be set before the
-roster exists. The plan is to write them alongside the roster (two extra roster
-rows of type `Travel In` / `Travel Out`, or a small `crew_travel_df` table;
-see Q5).
+Travel times depend on the generated shifts, so they are written with the
+roster: two rows per FIFO swing, `Travel In` (ends 1–4 h before the first
+shift) and `Travel Out` (starts 1–4 h after the last), each lasting 2–6 h.
 
 ## D. Demand (`activity_demand_df`)
 
@@ -93,7 +97,7 @@ times (05:00 / 17:00) the previous model mostly had.
 
 | ID | New rule | Previous model (`data/generated/small`) | Where enforced |
 |---|---|---|---|
-| M1 | **1,000** crew members | 74 (small) to 1,540 (xlarge) synthetic crew | Data |
+| M1 | **1,000** crew members | 74 (small) to 1,540 (xlarge) synthetic crew | Roster gen (crew list built from the roster; checked) |
 | M2 | Haskett 400 = 300 Residential + 100 FIFO | Haskett 6 + some reserve | Data |
 | M3 | Yarmouth 300 = 300 FIFO | Yarmouth 12 + some reserve | Data |
 | M4 | Nelaway 300 = 200 Residential + 100 FIFO | Nelaway 12 + some reserve | Data |
@@ -113,4 +117,4 @@ otherwise, and the generator should respect them:
 | Location continuity | a crew member starts a duty where the last one ended (relevant for Haskett ↔ Yarmouth mainline duties) |
 | Return to base | at swing end and on transition days |
 | Swing patterns | FIFO 14 on / 14 off, Residential 6 on / 6 off (briefing §4) |
-| Eligibility: role, competencies, currency, medical, mentor | needs data that is now blank (Q6) |
+| Eligibility: role, competencies, currency, medical, mentor | role, competencies, currency and medical are set from the roster and checked; mentor not used yet (Q6) |
