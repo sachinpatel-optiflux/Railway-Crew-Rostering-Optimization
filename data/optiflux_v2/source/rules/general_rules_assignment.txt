@@ -7,7 +7,7 @@ for FIFO : travel_in and travel-out stats also ; whe ecactly they are coming and
 travel_in should be before the first shift and travel-out should be after the last shft 
 {for now randomly set the data}
 
-for residential : first shift should be fay shoft
+for residential : first shift should be day shift
 
 Extras: 
 
