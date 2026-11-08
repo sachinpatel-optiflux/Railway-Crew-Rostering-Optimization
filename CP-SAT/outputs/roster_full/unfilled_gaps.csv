@@ -1,0 +1,55 @@
+Assignment ID,Date,Start,Activity ID,Activity Name,Original User Id,Kind,Is_locked_gap,Leave Type
+AS0000193,2026-11-04,04:00,A06,Madison Crew,U100007,gap,True,Full Swing
+AS0000194,2026-11-05,04:00,A06,Madison Crew,U100007,gap,True,Full Swing
+AS0000195,2026-11-06,04:00,A06,Madison Crew,U100007,gap,False,Full Swing
+AS0000196,2026-11-07,16:00,A06,Madison Crew,U100007,gap,False,Full Swing
+AS0000253,2026-11-01,05:00,A06,Madison Crew,U100009,gap,True,Random
+AS0000254,2026-11-02,05:00,A06,Madison Crew,U100009,gap,True,Random
+AS0000255,2026-11-03,05:00,A06,Madison Crew,U100009,gap,True,Random
+AS0000256,2026-11-04,17:00,A06,Madison Crew,U100009,gap,True,Random
+AS0000257,2026-11-05,17:00,A06,Madison Crew,U100009,gap,True,Random
+AS0001135,2026-11-01,12:00,A06,Madison Crew,U100037,gap,True,Random
+AS0001136,2026-11-02,12:00,A06,Madison Crew,U100037,gap,True,Random
+AS0001137,2026-11-03,12:00,A06,Madison Crew,U100037,gap,True,Random
+AS0001138,2026-11-05,00:00,A06,Madison Crew,U100037,gap,True,Random
+AS0005135,2026-11-04,04:00,A15,NE Ship,U100165,gap,True,Full Swing
+AS0005136,2026-11-05,04:00,A15,NE Ship,U100165,gap,True,Full Swing
+AS0005137,2026-11-06,04:00,A15,NE Ship,U100165,gap,False,Full Swing
+AS0005138,2026-11-07,16:00,A15,NE Ship,U100165,gap,False,Full Swing
+AS0006270,2026-11-05,09:00,A13,Nelaway Driver,U100201,gap,True,Random
+AS0006271,2026-11-06,09:00,A13,Nelaway Driver,U100201,gap,False,Random
+AS0006272,2026-11-07,21:00,A13,Nelaway Driver,U100201,gap,False,Random
+AS0006889,2026-11-04,14:00,A13,Nelaway Driver,U100221,gap,True,Full Swing
+AS0006890,2026-11-05,14:00,A13,Nelaway Driver,U100221,gap,True,Full Swing
+AS0006891,2026-11-06,14:00,A13,Nelaway Driver,U100221,gap,False,Full Swing
+AS0006892,2026-11-08,02:00,A13,Nelaway Driver,U100221,gap,False,Full Swing
+AS0006893,2026-11-09,02:00,A13,Nelaway Driver,U100221,gap,False,Full Swing
+AS0006894,2026-11-10,02:00,A13,Nelaway Driver,U100221,gap,False,Full Swing
+AS0007412,2026-11-01,03:00,A03,Yarmouth Mainline,U100237,gap,True,Full Swing
+AS0007413,2026-11-02,03:00,A01,Haskett Mainline,U100237,gap,True,Full Swing
+AS0007414,2026-11-03,03:00,A03,Yarmouth Mainline,U100237,gap,True,Full Swing
+AS0007415,2026-11-04,03:00,A01,Haskett Mainline,U100237,gap,True,Full Swing
+AS0007416,2026-11-05,03:00,A03,Yarmouth Mainline,U100237,gap,True,Full Swing
+AS0007417,2026-11-06,03:00,A01,Haskett Mainline,U100237,gap,False,Full Swing
+AS0007418,2026-11-07,03:00,A03,Yarmouth Mainline,U100237,gap,False,Full Swing
+AS0007419,2026-11-08,15:00,A01,Haskett Mainline,U100237,gap,False,Full Swing
+AS0008192,2026-11-01,06:00,A01,Haskett Mainline,U100257,gap,True,Full Swing
+AS0008193,2026-11-02,06:00,A03,Yarmouth Mainline,U100257,gap,True,Full Swing
+AS0008194,2026-11-03,06:00,A01,Haskett Mainline,U100257,gap,True,Full Swing
+AS0008195,2026-11-04,06:00,A03,Yarmouth Mainline,U100257,gap,True,Full Swing
+AS0008196,2026-11-05,06:00,A01,Haskett Mainline,U100257,gap,True,Full Swing
+AS0008817,2026-11-02,08:00,A03,Yarmouth Mainline,U100273,gap,True,Random
+AS0008818,2026-11-03,08:00,A01,Haskett Mainline,U100273,gap,True,Random
+AS0008819,2026-11-04,08:00,A03,Yarmouth Mainline,U100273,gap,True,Random
+AS0008820,2026-11-05,08:00,A01,Haskett Mainline,U100273,gap,True,Random
+AS0008821,2026-11-06,08:00,A03,Yarmouth Mainline,U100273,gap,False,Random
+AS0013363,2026-11-01,22:00,A08,Work Train,U100391,gap,True,Full Swing
+AS0013365,2026-11-03,22:00,A08,Work Train,U100391,gap,True,Full Swing
+AS0013367,2026-11-05,22:00,A08,Work Train,U100391,gap,True,Full Swing
+AS0013369,2026-11-07,22:00,A08,Work Train,U100391,gap,False,Full Swing
+AS0013519,2026-11-01,05:00,A04,Yarmouth Mainline CO,U100395,gap,True,Full Swing
+AS0013520,2026-11-02,05:00,A04,Yarmouth Mainline CO,U100395,gap,True,Full Swing
+AS0013521,2026-11-03,05:00,A04,Yarmouth Mainline CO,U100395,gap,True,Full Swing
+AS0013522,2026-11-04,05:00,A04,Yarmouth Mainline CO,U100395,gap,True,Full Swing
+AS0013523,2026-11-05,05:00,A04,Yarmouth Mainline CO,U100395,gap,True,Full Swing
+AS0013933,2026-11-08,04:00,A12,BY Ship,U100406,gap,False,Day Shifts
