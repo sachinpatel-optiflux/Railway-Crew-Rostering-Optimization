@@ -8,9 +8,10 @@ Reads (data/optiflux_v2/):
 
 Writes (data/optiflux_v2/):
     roster_df.csv             who works which job, when and where (Demand / Excess / Relief / Travel rows)
-    crew_master_data_df.csv   one row per person the roster uses (about 1,000; more only if needed)
+    crew_master_data_df.csv   one row per person the roster uses (700; more only if needed)
     crew_competencies_df.csv  competencies each person needs for the activities they are eligible for
     crew_currency_df.csv      last time each person performed each activity head with a currency threshold
+    eligibility_matrix.csv    per activity (grouped by head): who holds every competency it needs
     roster_lines.csv          the shift lines (teams) behind the roster: explanation, not a DB table
     roster_report.md          generated summary with pattern samples
 
@@ -34,20 +35,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DIR = ROOT / "data" / "optiflux_v2"
 
-# crew_master_data_changes.txt: 1,000 crew. 400 Haskett = 300 Residential + 100 FIFO; 300 Yarmouth = 300 FIFO;
-# 300 Nelaway = 200 Residential + 100 FIFO. general_rules_assignment.txt: "we can create more user ids if needed".
+# crew_master_data_changes.txt had 1,000 crew; gap_filling_rules.md R2 cuts that to 700, keeping the mix (70% of
+# each pool). 280 Haskett = 210 Residential + 70 FIFO; 210 Yarmouth = 210 FIFO; 210 Nelaway = 140 Residential + 70 FIFO.
+# general_rules_assignment.txt: "we can create more user ids if needed".
 CREW_TARGETS: dict[tuple[str, str], int] = {
-    ("Haskett", "Residential"): 300,
-    ("Haskett", "FIFO"): 100,
-    ("Yarmouth", "FIFO"): 300,
-    ("Nelaway", "Residential"): 200,
-    ("Nelaway", "FIFO"): 100,
+    ("Haskett", "Residential"): 210,
+    ("Haskett", "FIFO"): 70,
+    ("Yarmouth", "FIFO"): 210,
+    ("Nelaway", "Residential"): 140,
+    ("Nelaway", "FIFO"): 70,
 }
 DEPOT_ORDER = ["Haskett", "Yarmouth", "Nelaway"]
 CLASS_ORDER = ["Residential", "FIFO"]
 FIRST_USER_NUMBER = 100001  # same User Id format as the upload (U100001 ...)
 
-RELIEF_ID, TRAVEL_IN_ID, TRAVEL_OUT_ID = "A90", "A91", "A92"
+RELIEF_ID, TRAVEL_IN_ID, TRAVEL_OUT_ID, OFF_ID = "A90", "A91", "A92", "A93"
 RELIEF_ROLE = "Driver"  # every work activity accepts a Driver, so Relief can cover any gap
 OFF_SITE = "Off Site"
 
@@ -59,6 +61,7 @@ ROSTER_HEADER = [
 CREW_HEADER = ["User Id", "Classification", "Eligibility", "Depot", "Role", "Is Mentor", "Medical", "Position"]
 COMPETENCY_HEADER = ["User Id", "Competency", "Competency LMS Code", "Expiry Date", "status"]
 CURRENCY_HEADER = ["Currency ID", "User Id", "Activity Head", "Last Performed Date", "Last Activity ID"]
+ELIGIBILITY_HEADER = ["Activity Head", "Activity ID", "Activity Name", "Eligible Count", "Eligible User Ids"]
 LINE_HEADER = [
     "Line ID", "Assignment Type", "Pattern", "Activity IDs", "Activity Names", "Day Start", "Night Start",
     "Classification", "Home Depots", "Role", "Members", "Shifts Per Day",
@@ -257,7 +260,7 @@ def plan_demand_lines(acts, seats, priority, s: Settings) -> list[Line]:
     for x in moving:
         for h in sorted(seats[x].elements()):
             back = [r for r in sorted(acts) if acts[r]["Start Depot"] == acts[x]["End Depot"]
-                    and acts[r]["End Depot"] == acts[x]["Start Depot"] and acts[r]["Activity Type"] not in ("Relief", "Travel")]  # fmt: skip
+                    and acts[r]["End Depot"] == acts[x]["Start Depot"] and acts[r]["Activity Type"] not in ("Relief", "Travel", "Off")]  # fmt: skip
             back.sort(key=lambda r: (h not in hours_with_demand.get(r, set()), r))  # prefer a return with demand at h
             if not back:
                 raise SystemExit(f"{x} ends away from its start depot and no activity returns from there")
@@ -470,25 +473,42 @@ def build(data_dir: Path) -> dict:
             travel.append(Shift(uid, leave, leave + hours(s.travel_duration), TRAVEL_OUT_ID, "Travel Out", "",
                                 sw[-1].end_loc, OFF_SITE, ln.line_id, sw[-1].swing))  # fmt: skip
 
+    # --- Off rows (gap_filling_rules.md R1): every horizon day of the off-block between swings ---------------
+    # A day is off when no swing of the person covers it (first to last shift start date). The short rest
+    # inside a swing (e.g. between a day block and a late-night block) is not an off-block and gets no row.
+    off: list[Shift] = []
+    horizon_end = s.start + timedelta(days=s.days)
+    for uid, (ln, home, _) in member_of.items():
+        covered = set()
+        for sw in swings_of[uid]:
+            d0, d1 = sw[0].start.date(), sw[-1].start.date()
+            covered |= {d0 + timedelta(days=k) for k in range((d1 - d0).days + 1)}
+        where = home if ln.crew_class == "Residential" else OFF_SITE  # FIFO crew go home off site
+        for k in range(s.days):
+            d = s.start + timedelta(days=k)
+            if d not in covered:
+                t0 = datetime.combine(d, datetime.min.time())
+                off.append(Shift(uid, t0, t0 + timedelta(hours=23, minutes=59), OFF_ID, "Off", "", where, where,
+                                 ln.line_id, -1))  # fmt: skip
+
     # --- roster rows ---------------------------------------------------------------------------------------
     swing_no = {}
     for uid, sws in swings_of.items():
         for n, sw in enumerate(sws, start=1):
             swing_no[(uid, sw[0].swing)] = n
-    horizon_end = s.start + timedelta(days=s.days)
     roster = []
-    for sh in sorted(shifts + travel, key=lambda x: (x.user, x.start)):
+    for sh in sorted(shifts + travel + off, key=lambda x: (x.user, x.start)):
         a = acts[sh.activity]
         roster.append({
             "Assignment ID": f"AS{len(roster) + 1:07d}", "User Id": sh.user,
             "Start Date": sh.start.date().isoformat(), "End Date": sh.end.date().isoformat(),
             "Shift Start Time": sh.start.strftime("%H:%M"), "Shift End Time": sh.end.strftime("%H:%M"),
             "Activity ID": sh.activity, "Activity Name": a["Activity Name"],
-            "Is Locked": "Yes" if sh.assignment_type in ("Demand", "Travel In", "Travel Out") else "No",
+            "Is Locked": "False",  # gap_filling_rules.md R4: nothing is locked until a user locks it in the app
             "Activity Head": a["Activity Head"], "Activity Type": a["Activity Type"], "Activity Group": a["Activity Group"],
             "Assignment Type": sh.assignment_type, "Demand ID": sh.demand_id,
             "Start Location": sh.start_loc, "End Location": sh.end_loc, "Line ID": sh.line,
-            "Swing": str(swing_no[(sh.user, sh.swing)]),
+            "Swing": str(swing_no[(sh.user, sh.swing)]) if sh.swing >= 0 else "",
             "In Horizon": "Yes" if s.start <= sh.start.date() < horizon_end else "No",
         })  # fmt: skip
 
@@ -499,7 +519,7 @@ def build(data_dir: Path) -> dict:
         codes_of[r["Activity ID"]].append((r["Competency LMS Code"], r["Competency"]))
     first_date = {}
     for r in roster:
-        if r["Assignment Type"] not in ("Travel In", "Travel Out"):
+        if r["Assignment Type"] not in ("Travel In", "Travel Out", "Off"):
             first_date.setdefault(r["User Id"], date.fromisoformat(r["Start Date"]))
     competencies, currency = [], []
     for uid, (ln, home, _) in member_of.items():
@@ -533,6 +553,8 @@ def build(data_dir: Path) -> dict:
             currency.append({"Currency ID": f"CU{len(currency) + 1:06d}", "User Id": uid, "Activity Head": head,
                              "Last Performed Date": last.isoformat(), "Last Activity ID": a})  # fmt: skip
 
+    eligibility = build_eligibility(acts, compliance, competencies, horizon_end - timedelta(days=1))
+
     line_rows = []
     for ln in lines:
         line_rows.append({
@@ -550,8 +572,34 @@ def build(data_dir: Path) -> dict:
     return {
         "settings": s, "acts": acts, "demand": demand, "lines": lines, "roster": roster, "crew": crew,
         "competencies": competencies, "currency": currency, "line_rows": line_rows, "added": added,
+        "eligibility": eligibility,
         "skipped_excess": skipped_excess,
     }  # fmt: skip
+
+
+def build_eligibility(acts, compliance, competencies, last_day: date) -> list[dict[str, str]]:
+    """eligibility_matrix.csv (gap_filling_rules.md R5): crew_competencies_df joined with compliance_matrix_df.
+
+    One row per work activity, sorted by Activity Head. A person is eligible when they hold every competency
+    the activity needs, each Valid and not expiring before the last horizon day. Role, medical and currency
+    are separate checks and are not folded in here.
+    """
+    needs: dict[str, set[str]] = defaultdict(set)
+    for r in compliance:
+        needs[r["Activity ID"]].add(r["Competency LMS Code"])
+    held: dict[str, set[str]] = defaultdict(set)
+    for r in competencies:
+        if r["status"] == "Valid" and date.fromisoformat(r["Expiry Date"]) >= last_day:
+            held[r["User Id"]].add(r["Competency LMS Code"])
+    rows = []
+    for aid in sorted(needs, key=lambda a: (acts[a]["Activity Head"], a)):
+        users = sorted(u for u, codes in held.items() if needs[aid] <= codes)
+        rows.append({
+            "Activity Head": acts[aid]["Activity Head"], "Activity ID": aid,
+            "Activity Name": acts[aid]["Activity Name"], "Eligible Count": str(len(users)),
+            "Eligible User Ids": ";".join(users),
+        })  # fmt: skip
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -564,7 +612,7 @@ def pattern_grid(result: dict, line: Line, days: int) -> list[str]:
     s: Settings = result["settings"]
     cells: dict[tuple[str, int], str] = {}
     for r in result["roster"]:
-        if r["Line ID"] != line.line_id or r["Assignment Type"] in ("Travel In", "Travel Out"):
+        if r["Line ID"] != line.line_id or r["Assignment Type"] in ("Travel In", "Travel Out", "Off"):
             continue
         k = (date.fromisoformat(r["Start Date"]) - s.start).days
         if 0 <= k < days:
@@ -609,7 +657,7 @@ def write_report(result: dict, path: Path) -> None:
         f"{sum(ln.assignment_type == 'Relief' for ln in lines)} Relief) |",
         f"| Demand per day | {daily_demand} crew-shifts |",
     ]
-    for t in ("Demand", "Excess", "Relief", "Travel In", "Travel Out"):
+    for t in ("Demand", "Excess", "Relief", "Travel In", "Travel Out", "Off"):
         L.append(f"| {t} rows per day (horizon average) | {by_type[t] / s.days:.1f} |")
     L += ["", "## Crew by depot and classification", "", "| Depot | Classification | Target | In crew list | Demand lines | Excess lines | Relief |", "|---|---|---|---|---|---|---|"]  # fmt: skip
     role_count: dict[tuple[str, str], Counter] = defaultdict(Counter)
@@ -623,7 +671,7 @@ def write_report(result: dict, path: Path) -> None:
     if result["added"]:
         L += ["", "People added beyond the targets: " + ", ".join(f"{d}/{c} +{n}" for (d, c), n in result["added"].items())]  # fmt: skip
     else:
-        L += ["", "No people had to be added beyond the 1,000 in the rules."]
+        L += ["", f"No people had to be added beyond the {sum(CREW_TARGETS.values()):,} in the rules."]
     if result["skipped_excess"]:
         L += [f"Excess lines skipped for lack of people: {len(result['skipped_excess'])}."]
 
@@ -675,6 +723,7 @@ def main(argv: list[str] | None = None) -> None:
     write_csv(out / "crew_competencies_df.csv", COMPETENCY_HEADER, result["competencies"])
     write_csv(out / "crew_currency_df.csv", CURRENCY_HEADER, result["currency"])
     write_csv(out / "roster_lines.csv", LINE_HEADER, result["line_rows"])
+    write_csv(out / "eligibility_matrix.csv", ELIGIBILITY_HEADER, result["eligibility"])
     write_report(result, out / "roster_report.md")
     types = Counter(r["Assignment Type"] for r in result["roster"])
     print(f"roster: {len(result['roster'])} rows {dict(types)}")

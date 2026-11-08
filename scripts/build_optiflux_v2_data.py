@@ -61,6 +61,8 @@ EXTRA_ACTIVITIES = [
     # general_rules_assignment.txt: FIFO "travel_in and travel_out ... when exactly they are coming and leaving".
     _non_work("A91", "Travel In", "Travel", "Travel", "Travel"),
     _non_work("A92", "Travel Out", "Travel", "Travel", "Travel"),
+    # gap_filling_rules.md R1: the off-block between two swings gets rows with Activity Name Off, Head RR.
+    _non_work("A93", "Off", "Rest", "RR", "Off"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -104,7 +106,10 @@ DEMAND_RULES: dict[str, list[tuple[int, int]]] = {
 CONSTRAINTS = [
     # Planning horizon of the initial roster (open question Q11): one full FIFO cycle.
     ("Planning Horizon Start", "2026-11-01", "Active"),
-    ("Planning Horizon Days", "28", "Active"),
+    # gap_filling_rules.md R3: the full month of November.
+    ("Planning Horizon Days", "30", "Active"),
+    # gap_filling_rules.md G1: the roster ran from the 1st; the solver may only change rows from this date on.
+    ("Solver Start Date", "2026-11-06", "Active"),
     # demand_changes.txt: "end time = 12 hrs".
     ("Shift Length Hours", "12", "Active"),
     # Carried over from the previous model (briefing section 9).
@@ -128,11 +133,21 @@ CONSTRAINTS = [
     ("No Activity Rows", "", "Inactive"),
     # Share of each activity's shift lines given an extra Excess line (see 05_roster_generation.md).
     ("Excess Line Fraction", "0.10", "Active"),
-    # general_rules_assignment.txt: "remove maybe 10 percent of the roster", then refill from Relief/Excess.
-    ("Recovery Removal Fraction", "0.10", "Active"),
+    # gap_filling_rules.md G2: leave per type, as a share of the crew (15% in total).
+    ("Leave Full Swing Fraction", "0.05", "Active"),
+    ("Leave Day Shifts Fraction", "0.02", "Active"),
+    ("Leave Night Shifts Fraction", "0.03", "Active"),
+    ("Leave Random Fraction", "0.05", "Active"),
     # Previous model, for the recovery step: Relief may start at any time, Excess may move by 1 h.
     ("Relief Allowed Start Offsets", "ANY", "Active"),
     ("Excess Allowed Start Offsets", "-60;0;60", "Active"),
+    # gap_filling_rules.md F1/F3: Demand crew may move to another seat by lift-up/layback of at most 1 h, and a
+    # block (the day or night half of a swing) may change its start time at most once, by at most 60 minutes.
+    ("Demand Allowed Start Offsets", "-60;0;60", "Active"),
+    ("Max Start Changes Per Block", "1", "Active"),
+    ("Max Start Change Minutes", "60", "Active"),
+    # gap_filling_rules.md R4: every row is unlocked; locking is a later application feature.
+    ("Default Is Locked", "False", "Active"),
     ("Random Seed", "2026", "Active"),
 ]
 
@@ -199,7 +214,7 @@ def build_priority(old: Path, activities: list[dict[str, str]]) -> tuple[list[st
     heads = [
         OLD_NAMES.get(r["Activity Head"], r["Activity Head"]) for r in sorted(rows, key=lambda r: int(r["Priority"]))
     ]
-    work_heads = {a["Activity Head"] for a in activities if a["Activity Type"] not in ("Relief", "Travel")}
+    work_heads = {a["Activity Head"] for a in activities if a["Activity Type"] not in ("Relief", "Travel", "Off")}
     missing = sorted(work_heads - set(heads))
     unknown = sorted(set(heads) - work_heads)
     if missing or unknown:
@@ -227,7 +242,7 @@ def build_compliance(old: Path, activities: list[dict[str, str]]) -> tuple[list[
                 copy.update({"Competency LMS Code": "AC-A17", "Competency": "Work Train CO Sign-off"})
             out.append(copy)
     out.sort(key=lambda r: r["Activity ID"])
-    work_ids = {a["Activity ID"] for a in activities if a["Activity Type"] not in ("Relief", "Travel")}
+    work_ids = {a["Activity ID"] for a in activities if a["Activity Type"] not in ("Relief", "Travel", "Off")}
     missing = sorted(work_ids - {r["Activity ID"] for r in out})
     if missing:
         raise SystemExit(f"compliance matrix has no rows for {missing}")

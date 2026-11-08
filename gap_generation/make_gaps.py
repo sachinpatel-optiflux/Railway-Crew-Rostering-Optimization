@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
-"""Make a percentage of the crew unavailable, writing a reduced copy of the crew master data.
+"""Put crew on leave and write roster_full.csv, the roster with its gaps (gap_filling_rules.md G1-G4).
 
-The original file is only read. See gap_generation/README.md for the full explanation.
+Layer 0 of the pipeline (then option_generation/, then CP-SAT/). The input tables are only read.
 
-    python gap_generation/make_gaps.py --percent 5
-    python gap_generation/make_gaps.py --percent 10 --seed 7
+Leave mix (shares of the crew, from constraints_df.csv; 15% in total, one leave per person):
+    Full swing   5%   every shift of one swing (6 days Residential, 14 days FIFO)
+    Day shifts   2%   the 3 day shifts of one 6-day Residential swing
+    Night shifts 3%   the 3 night shifts of one 6-day Residential swing
+    Random       5%   a run of 1 or more consecutive shifts inside one swing
+
+A row on leave keeps its original `User Id`, but `New User Id` is blank. If it is a Demand row it is a
+gap (`Is Gap` = True). `Is_locked_gap` is True for gaps before the solver start date (6 Nov): those days
+have already happened and are never filled. `Optimised User Id` stays blank here; only CP-SAT fills it.
+
+    python gap_generation/make_gaps.py
+    python gap_generation/make_gaps.py --seed 7 --output-dir gap_generation/output_seed7
 """
 
 from __future__ import annotations
@@ -12,110 +22,188 @@ from __future__ import annotations
 import argparse
 import csv
 import random
-import sys
-from collections import Counter
+from collections import Counter, defaultdict
+from datetime import date
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_INPUT = HERE.parent / "data" / "optiflux_v2" / "crew_master_data_df.csv"
-DEFAULT_OUTPUT = HERE / "crew_with_gaps.csv"
-REMOVED_NAME = "removed_crew.csv"
-ROSTER_NAME = "roster_df.csv"  # looked for next to the input file
-DEFAULT_SEED = 2026  # same as "Random Seed" in data/optiflux_v2/constraints_df.csv
-ID_COLUMN = "User Id"
+ROOT = HERE.parent
+DEFAULT_DATA = ROOT / "data" / "optiflux_v2"
+DEFAULT_OUTPUT = HERE / "output"
+
+WORK = ("Demand", "Excess", "Relief")
+TRAVEL = ("Travel In", "Travel Out")
+FULL, DAY, NIGHT, RANDOM = "Full Swing", "Day Shifts", "Night Shifts", "Random"
+LEAVE_SETTINGS = {
+    FULL: "Leave Full Swing Fraction",
+    DAY: "Leave Day Shifts Fraction",
+    NIGHT: "Leave Night Shifts Fraction",
+    RANDOM: "Leave Random Fraction",
+}
+# Columns added to roster_df.csv. The three user columns go right after `User Id`, so the original, after-leave
+# and optimised person sit side by side; the gap flags go at the end.
+USER_COLUMNS = ["New User Id", "Optimised User Id"]
+FLAG_COLUMNS = ["Leave Type", "Is Gap", "Is_locked_gap"]
+LEAVE_PLAN_HEADER = ["Leave ID", "User Id", "Classification", "Depot", "Leave Type", "Swing", "First Date",
+                     "Last Date", "Shifts On Leave", "Gaps", "Locked Gaps"]  # fmt: skip
 
 
-def parse_percent(text: str) -> float:
-    """Accept 5, 7.5 or 5%. Must leave at least some crew and remove at least some."""
-    try:
-        value = float(text.strip().rstrip("%"))
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"{text!r} is not a number") from None
-    if not 0 < value < 100:
-        raise argparse.ArgumentTypeError(f"{text!r} must be above 0 and below 100")
-    return value
-
-
-def read_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+def read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8-sig") as fh:
-        reader = csv.DictReader(fh)
-        rows = list(reader)
-        return list(reader.fieldnames or []), rows
+        return list(csv.DictReader(fh))
 
 
 def write_csv(path: Path, header: list[str], rows: list[dict[str, str]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=header, lineterminator="\n")
+        writer = csv.DictWriter(fh, fieldnames=header, lineterminator="\n", extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
 
-def pick_removed(user_ids: list[str], percent: float, seed: int) -> set[str]:
-    """Pick round(N * percent / 100) people at random, but always at least 1.
-
-    Sorting first makes the result independent of the file's row order. Taking the front of
-    one shuffled list means that, for the same seed, the 5% group is inside the 10% group.
-    """
-    count = max(1, round(len(user_ids) * percent / 100))
-    shuffled = sorted(user_ids)
-    random.Random(seed).shuffle(shuffled)
-    return set(shuffled[:count])
+def is_day(row: dict[str, str], day_from: int, day_to: int) -> bool:
+    minutes = int(row["Shift Start Time"][:2]) * 60 + int(row["Shift Start Time"][3:])
+    return day_from <= minutes < day_to
 
 
-def open_shifts(roster_path: Path, removed: set[str]) -> Counter[str]:
-    """Count the removed people's shifts inside the horizon, by Assignment Type."""
-    _, rows = read_csv(roster_path)
-    return Counter(r["Assignment Type"] for r in rows if r["User Id"] in removed and r["In Horizon"] == "Yes")
+def full_header(roster_columns: list[str]) -> list[str]:
+    i = roster_columns.index("User Id") + 1
+    return roster_columns[:i] + USER_COLUMNS + roster_columns[i:] + FLAG_COLUMNS
 
 
-def print_summary(crew: list[dict[str, str]], removed_rows: list[dict[str, str]], percent: float, seed: int) -> None:
-    print(f"Crew: {len(crew)} -> {len(crew) - len(removed_rows)} ({len(removed_rows)} removed, {percent:g}%, seed {seed})")
-    for column in ("Depot", "Classification", "Role"):
-        before = Counter(r[column] for r in crew)
-        after = Counter(r[column] for r in removed_rows)
-        print(f"  {column}: " + ", ".join(f"{k} -{after[k]}/{before[k]}" for k in sorted(before)))
+def make_leave(data_dir: Path, seed: int) -> dict:
+    cons = {r["Constraint"]: r["Value"] for r in read_csv(data_dir / "constraints_df.csv") if r["Status"] == "Active"}
+    crew = {c["User Id"]: c for c in read_csv(data_dir / "crew_master_data_df.csv")}
+    roster = read_csv(data_dir / "roster_df.csv")
+    cutoff = date.fromisoformat(cons["Solver Start Date"])
+    day_from, day_to = (int(t[:2]) * 60 + int(t[3:]) for t in cons["Day Shift Window"].split("-"))
+    rng = random.Random(seed)
+
+    # Swings that lie wholly inside the horizon: (user, swing) -> its work rows, in order.
+    swings: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    outside: set[tuple[str, str]] = set()
+    for r in roster:
+        if r["Assignment Type"] in WORK:
+            key = (r["User Id"], r["Swing"])
+            swings[key].append(r)
+            if r["In Horizon"] != "Yes":
+                outside.add(key)
+    for key in outside:
+        del swings[key]
+    of_user: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for key in sorted(swings):
+        of_user[key[0]].append(key)
+
+    def split_6day(rows: list[dict]) -> tuple[list[dict], list[dict]] | None:
+        """Day and night halves of a 3 + 3 Residential swing, or None for any other shape."""
+        days = [r for r in rows if is_day(r, day_from, day_to)]
+        nights = [r for r in rows if not is_day(r, day_from, day_to)]
+        return (days, nights) if len(days) == 3 and len(nights) == 3 else None
+
+    # One leave per person: people in a seeded random order, the leave types handed out in turn.
+    wanted = {t: round(len(crew) * float(cons[s])) for t, s in LEAVE_SETTINGS.items()}
+    people = sorted(u for u in crew if of_user[u])
+    rng.shuffle(people)
+    plan: list[dict] = []
+    taken: set[str] = set()
+    for leave_type in (DAY, NIGHT, FULL, RANDOM):  # the picky types first, so they find their swings
+        for uid in people:
+            if sum(p["Leave Type"] == leave_type for p in plan) == wanted[leave_type]:
+                break
+            if uid in taken:
+                continue
+            options = of_user[uid]
+            if leave_type in (DAY, NIGHT):
+                options = [k for k in options if crew[uid]["Classification"] == "Residential" and split_6day(swings[k])]
+            if not options:
+                continue
+            key = rng.choice(options)
+            rows = swings[key]
+            if leave_type == FULL:
+                chosen = rows
+            elif leave_type == DAY:
+                chosen = split_6day(rows)[0]
+            elif leave_type == NIGHT:
+                chosen = split_6day(rows)[1]
+            else:
+                length = rng.randint(1, len(rows))
+                first = rng.randint(0, len(rows) - length)
+                chosen = rows[first : first + length]
+            taken.add(uid)
+            plan.append({"User Id": uid, "Leave Type": leave_type, "Swing": key[1], "rows": chosen})
+    short = {t: wanted[t] - sum(p["Leave Type"] == t for p in plan) for t in wanted}
+    if any(short.values()):
+        raise SystemExit(f"could not place every leave: {short}")
+
+    # A full-swing FIFO leave also cancels that swing's travel: the person does not come to site.
+    travel_of = defaultdict(list)
+    for r in roster:
+        if r["Assignment Type"] in TRAVEL:
+            travel_of[(r["User Id"], r["Swing"])].append(r)
+
+    on_leave: dict[str, str] = {}  # Assignment ID -> leave type
+    for p in plan:
+        for r in p["rows"]:
+            on_leave[r["Assignment ID"]] = p["Leave Type"]
+        if p["Leave Type"] == FULL:
+            for r in travel_of[(p["User Id"], p["Swing"])]:
+                on_leave[r["Assignment ID"]] = FULL
+
+    full = []
+    for r in roster:
+        leave = on_leave.get(r["Assignment ID"], "")
+        gap = bool(leave) and r["Assignment Type"] == "Demand"
+        row = dict(r)
+        row.update({
+            "New User Id": "" if leave else r["User Id"],
+            "Optimised User Id": "",  # G4: filled only by CP-SAT, after the whole pipeline has run
+            "Leave Type": leave,
+            "Is Gap": "True" if gap else "False",
+            "Is_locked_gap": ("True" if date.fromisoformat(r["Start Date"]) < cutoff else "False") if gap else "",
+        })  # fmt: skip
+        full.append(row)
+
+    by_id = {r["Assignment ID"]: r for r in full}
+    leave_rows = []
+    for i, p in enumerate(sorted(plan, key=lambda p: (p["rows"][0]["Start Date"], p["User Id"])), start=1):
+        rows = [by_id[r["Assignment ID"]] for r in p["rows"]]
+        c = crew[p["User Id"]]
+        leave_rows.append({
+            "Leave ID": f"LV{i:04d}", "User Id": p["User Id"], "Classification": c["Classification"],
+            "Depot": c["Depot"], "Leave Type": p["Leave Type"], "Swing": p["Swing"],
+            "First Date": rows[0]["Start Date"], "Last Date": rows[-1]["Start Date"], "Shifts On Leave": str(len(rows)),
+            "Gaps": str(sum(r["Is Gap"] == "True" for r in rows)),
+            "Locked Gaps": str(sum(r["Is_locked_gap"] == "True" for r in rows)),
+        })  # fmt: skip
+    return {"roster": full, "columns": full_header(list(roster[0])), "plan": leave_rows, "cutoff": cutoff,
+            "crew": crew}  # fmt: skip
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Remove a percentage of crew from the crew master data.")
-    parser.add_argument("--percent", required=True, type=parse_percent, help="share of crew to remove, e.g. 5 or 10")
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help=f"random seed (default {DEFAULT_SEED})")
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="crew master CSV to read")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="reduced crew CSV to write")
-    args = parser.parse_args(argv)
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("--data-dir", type=Path, default=DEFAULT_DATA, help="optiflux_v2 tables (default: %(default)s)")
+    p.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT, help="where to write (default: %(default)s)")
+    p.add_argument("--seed", type=int, default=2026, help="random seed (default: %(default)s)")
+    args = p.parse_args(argv)
+    if args.output_dir.resolve() == args.data_dir.resolve():
+        raise SystemExit("error: --output-dir must differ from --data-dir (the input tables are never changed)")
+    result = make_leave(args.data_dir, args.seed)
+    out = args.output_dir
+    out.mkdir(parents=True, exist_ok=True)
+    roster = result["roster"]
+    write_csv(out / "roster_full.csv", result["columns"], roster)
+    write_csv(out / "leave_plan.csv", LEAVE_PLAN_HEADER, result["plan"])
 
-    removed_path = args.output.parent / REMOVED_NAME
-    if args.input.resolve() in (args.output.resolve(), removed_path.resolve()):
-        print("error: an output path is the same as --input; the original file must stay unchanged", file=sys.stderr)
-        return 2
-
-    header, crew = read_csv(args.input)
-    if ID_COLUMN not in header:
-        print(f"error: {args.input} has no {ID_COLUMN!r} column", file=sys.stderr)
-        return 2
-    user_ids = [r[ID_COLUMN] for r in crew]
-    if len(set(user_ids)) != len(user_ids):
-        print(f"error: {args.input} has duplicate {ID_COLUMN} values", file=sys.stderr)
-        return 2
-
-    removed = pick_removed(user_ids, args.percent, args.seed)
-    kept_rows = [r for r in crew if r[ID_COLUMN] not in removed]
-    removed_rows = [r for r in crew if r[ID_COLUMN] in removed]
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    write_csv(args.output, header, kept_rows)
-    write_csv(removed_path, header, removed_rows)
-
-    print_summary(crew, removed_rows, args.percent, args.seed)
-    roster_path = args.input.parent / ROSTER_NAME
-    if roster_path.exists():
-        shifts = open_shifts(roster_path, removed)
-        detail = ", ".join(f"{k} {v}" for k, v in sorted(shifts.items()))
-        print(f"Their shifts in the horizon: {sum(shifts.values())} ({detail})")
-    print(f"Wrote {args.output}")
-    print(f"Wrote {removed_path}")
-    return 0
+    gaps = [r for r in roster if r["Is Gap"] == "True"]
+    locked = sum(r["Is_locked_gap"] == "True" for r in gaps)
+    types = Counter(p["Leave Type"] for p in result["plan"])
+    rows_off = Counter(r["Assignment Type"] for r in roster if r["Leave Type"])
+    print(f"Leave: {len(result['plan'])} of {len(result['crew'])} crew "
+          f"({', '.join(f'{t} {n}' for t, n in types.items())})")  # fmt: skip
+    print(f"Rows on leave: {sum(rows_off.values())} ({', '.join(f'{t} {n}' for t, n in sorted(rows_off.items()))})")
+    print(f"Gaps (Demand rows on leave): {len(gaps)}; locked (before {result['cutoff']}): {locked}; "
+          f"to fill: {len(gaps) - locked}")  # fmt: skip
+    print(f"Wrote {out / 'roster_full.csv'} and {out / 'leave_plan.csv'}")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

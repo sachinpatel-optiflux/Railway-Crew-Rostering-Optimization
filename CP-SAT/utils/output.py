@@ -1,114 +1,126 @@
-"""Turn the solver's choices into the recovered roster and the report files."""
+"""Write the solver's choice into roster_full.csv (`Optimised User Id`) and the report files.
+
+`Optimised User Id` starts as `New User Id` (blank on leave rows) and changes only where the solver moved
+someone:
+    * the row a person leaves (a Relief standby, an Excess row, or their own Demand seat) becomes blank;
+    * the row of the seat they take (a gap row, or a Demand row someone else left) gets their id.
+A trip home as Excess has no row of its own yet, so it is added as a new row with a `-R` Assignment ID.
+`Optimisation Note` says what happened on every changed row.
+"""
 
 from __future__ import annotations
 
-import csv
-from collections import Counter
-from pathlib import Path
+from collections import Counter, defaultdict
 
-from .data import Problem
-from .gaps import Slot
+from option_generation.data import PERSON, Data, write_csv
+from option_generation.options import Option, seat_key
 
-TIME = "%H:%M"
-DAY = "%Y-%m-%d"
+NOTE = "Optimisation Note"
 
 
-def write_csv(path: Path, header: list[str], rows: list[dict]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=header, lineterminator="\n", extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+def apply(data: Data, swings, chosen: dict[str, list[Option | None]], seats) -> dict:
+    roster = [dict(r) for r in data.roster]
+    by_id = {r["Assignment ID"]: r for r in roster}
+    for r in roster:
+        r["Optimised User Id"] = r[PERSON]
+        r[NOTE] = ""
+    rows_of_seat: dict[str, list[dict]] = defaultdict(list)
+    for r in roster:
+        if r["Assignment Type"] == "Demand" and data.rules.solvable(r["_s"].date()):
+            rows_of_seat[seat_key(r["Activity ID"], r["_s"])].append(r)
 
-
-def rewrite_row(problem: Problem, row: dict, option) -> dict:
-    """The roster row after a move. It keeps its Assignment ID, Line ID and Swing."""
-    activity = problem.activities[option.activity_id]
-    new = dict(row)
-    new.update({
-        "Start Date": option.start.strftime(DAY),
-        "End Date": option.end.strftime(DAY),
-        "Shift Start Time": option.start.strftime(TIME),
-        "Shift End Time": option.end.strftime(TIME),
-        "Activity ID": option.activity_id,
-        "Activity Name": activity["Activity Name"],
-        "Activity Head": activity["Activity Head"],
-        "Activity Type": activity["Activity Type"],
-        "Activity Group": activity["Activity Group"],
-        "Assignment Type": "Demand" if option.kind == "fill" else "Excess",
-        "Is Locked": "Yes" if option.kind == "fill" else "No",
-        "Demand ID": option.demand_id,
-        "Start Location": option.start_loc,
-        "End Location": option.end_loc,
-        "In Horizon": "Yes" if problem.rules.in_horizon(option.start.date()) else "No",
-    })  # fmt: skip
-    new["_s"], new["_e"] = option.start, option.end
-    return new
-
-
-def apply_solution(problem: Problem, chosen) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
-    """Return the new roster, the fills, the trips home and the dropped rows."""
-    replaced: dict[str, dict] = {}
-    dropped_ids: set[str] = set()
-    fills, rides, dropped = [], [], []
-    for swing, active in chosen:
-        by_row = {option.row_index: option for option in active}
-        for index, row in enumerate(swing.rows):
-            option = by_row.get(index)
+    fills, rides, dropped, extra = [], [], [], []
+    swing_of = {sw.key: sw for sw in swings}
+    for key, per_row in chosen.items():
+        sw = swing_of[key]
+        for row_id, option in zip(sw.row_ids, per_row):
+            row = by_id[row_id]
+            if option is not None and option.kind == "keep":
+                continue
+            row["Optimised User Id"] = ""
             if option is None:
-                dropped_ids.add(row["Assignment ID"])
-                dropped.append({**row, "Reason": "Stood down to give rest around a reassigned duty"})
-            elif option.kind != "keep":
-                replaced[row["Assignment ID"]] = rewrite_row(problem, row, option)
-                record = {
-                    "Date": option.start.strftime(DAY),
-                    "Start": option.start.strftime(TIME),
-                    "Activity ID": option.activity_id,
-                    "Activity Name": problem.activities[option.activity_id]["Activity Name"],
-                    "Demand ID": option.demand_id,
-                    "User Id": swing.user,
-                    "Classification": swing.classification,
-                    "Home Depot": swing.home,
-                    "Previous Type": row["Assignment Type"],
-                    "Previous Activity": row["Activity Name"],
-                    "Previous Date": row["Start Date"],
-                    "Previous Start": row["Shift Start Time"],
-                    "Assignment ID": row["Assignment ID"],
-                }
-                (fills if option.kind == "fill" else rides).append(record)
-    roster = [
-        replaced.get(row["Assignment ID"], row)
-        for row in problem.roster
-        if row["User Id"] not in problem.removed and row["Assignment ID"] not in dropped_ids
-    ]
-    key = lambda r: (r["Date"], r["Start"], r["Activity ID"], r["User Id"])  # noqa: E731
-    return roster, sorted(fills, key=key), sorted(rides, key=key), dropped
+                row[NOTE] = f"{sw.user} stood down to make room"
+                dropped.append(row)
+            elif option.kind == "fill":
+                row[NOTE] = f"{sw.user} moved to {data.activities[option.activity_id]['Activity Name']} " \
+                            f"{option.start:%Y-%m-%d %H:%M}"
+                fills.append((sw, row, option))
+            else:  # ride
+                row[NOTE] = f"{sw.user} rides home as Excess"
+                rides.append((sw, row, option))
+                activity = data.activities[option.activity_id]
+                new = {c: "" for c in data.columns}
+                new.update({
+                    "Assignment ID": f"{row_id}-R", "Optimised User Id": sw.user,
+                    "Start Date": option.start.strftime("%Y-%m-%d"), "End Date": option.end.strftime("%Y-%m-%d"),
+                    "Shift Start Time": option.start.strftime("%H:%M"), "Shift End Time": option.end.strftime("%H:%M"),
+                    "Activity ID": option.activity_id, "Activity Name": activity["Activity Name"],
+                    "Is Locked": "False", "Activity Head": activity["Activity Head"],
+                    "Activity Type": activity["Activity Type"], "Activity Group": activity["Activity Group"],
+                    "Assignment Type": "Excess", "Demand ID": option.demand_id,
+                    "Start Location": option.start_loc, "End Location": option.end_loc, "Line ID": row["Line ID"],
+                    "Swing": row["Swing"], "In Horizon": "Yes", "Is Gap": "False", NOTE: f"trip home for {sw.user}",
+                })  # fmt: skip
+                new["_s"], new["_e"] = option.start, option.end
+                extra.append(new)
 
-
-def unfilled_seats(problem: Problem, slots: list[Slot], fills: list[dict]) -> list[dict]:
-    taken = Counter((f["Activity ID"], f["Date"], f["Start"]) for f in fills)
-    rows = []
-    for slot in slots:
-        key = (slot.activity_id, slot.start.strftime(DAY), slot.start.strftime(TIME))
-        if slot.seats > taken[key]:
-            rows.append({
-                "Date": key[1], "Start": key[2], "Activity ID": slot.activity_id,
-                "Activity Name": problem.activities[slot.activity_id]["Activity Name"],
-                "Demand ID": slot.demand_id, "Seats Open": slot.seats - taken[key],
+    # Put each filler on an empty row of the seat they take (a gap row or a row its holder left).
+    records = []
+    waiting: dict[str, list] = defaultdict(list)
+    for sw, row, option in fills:
+        waiting[option.seat].append((sw, row, option))
+    unplaced = []
+    for key, items in waiting.items():
+        empty = [r for r in rows_of_seat[key] if not r["Optimised User Id"]]
+        empty.sort(key=lambda r: (r["Is Gap"] != "True", r["Assignment ID"]))
+        for (sw, row, option), target in zip(items, empty):
+            target["Optimised User Id"] = sw.user
+            target[NOTE] = f"filled by {sw.user} ({row['Assignment Type']}, from {row['Assignment ID']})"
+            records.append({
+                "Date": option.start.strftime("%Y-%m-%d"), "Start": option.start.strftime("%H:%M"),
+                "Activity ID": option.activity_id, "Activity Name": data.activities[option.activity_id]["Activity Name"],
+                "Filled Row": target["Assignment ID"], "Was Gap": target["Is Gap"],
+                "Original User Id": target["User Id"], "Optimised User Id": sw.user, "Source": row["Assignment Type"],
+                "From Row": row["Assignment ID"], "From Activity": row["Activity Name"],
+                "From Start": f"{row['Start Date']} {row['Shift Start Time']}", "Offset Minutes": option.offset,
+                "Chain Level": option.level, "Cost": option.cost,
             })  # fmt: skip
-    return rows
+        unplaced += items[len(empty):]
+    if unplaced:
+        raise SystemExit(f"error: {len(unplaced)} fills found no empty row on their seat, e.g. {unplaced[0][2].seat}")
+
+    roster += extra
+    unfilled = [
+        {"Assignment ID": r["Assignment ID"], "Date": r["Start Date"], "Start": r["Shift Start Time"],
+         "Activity ID": r["Activity ID"], "Activity Name": r["Activity Name"], "Original User Id": r["User Id"],
+         "Kind": "gap" if r["Is Gap"] == "True" else "left by a move", "Is_locked_gap": r["Is_locked_gap"],
+         "Leave Type": r["Leave Type"]}  # fmt: skip
+        for r in roster
+        if r["Assignment Type"] == "Demand" and not r["Optimised User Id"]
+    ]
+    records.sort(key=lambda f: (f["Date"], f["Start"], f["Activity ID"]))
+    return {"roster": roster, "fills": records, "rides": rides, "dropped": dropped, "unfilled": unfilled}
 
 
-def write_summary(path: Path, problem, slots, result, fills, rides, dropped, unfilled, validation, args) -> None:
-    open_by = Counter()
-    for slot in slots:
-        open_by[problem.activities[slot.activity_id]["Activity Name"]] += slot.seats
-    filled_by = Counter(f["Activity Name"] for f in fills)
-    source = Counter(f["Previous Type"] for f in fills)
-    same_slot = sum(
-        f["Previous Type"] == "Excess" and f["Previous Activity"] == f["Activity Name"]
-        and (f["Previous Date"], f["Previous Start"]) == (f["Date"], f["Start"])
-        for f in fills
-    )  # fmt: skip
+def write_outputs(out, data: Data, result: dict) -> None:
+    columns = data.columns + ([NOTE] if NOTE not in data.columns else [])
+    write_csv(out / "roster_full.csv", columns, result["roster"])
+    write_csv(out / "reassignments.csv", list(result["fills"][0]) if result["fills"] else ["Date"], result["fills"])
+    unfilled_cols = ["Assignment ID", "Date", "Start", "Activity ID", "Activity Name", "Original User Id", "Kind",
+                     "Is_locked_gap", "Leave Type"]  # fmt: skip
+    write_csv(out / "unfilled_gaps.csv", unfilled_cols, result["unfilled"])
+
+
+def write_summary(path, data: Data, seats, solved, result: dict, validation: dict, args) -> None:
+    roster = result["roster"]
+    gaps = [r for r in roster if r["Is Gap"] == "True"]
+    locked = [r for r in gaps if r["Is_locked_gap"] == "True"]
+    to_fill = [r for r in gaps if r["Is_locked_gap"] == "False"]
+    filled_gaps = [r for r in to_fill if r["Optimised User Id"]]
+    opened = [u for u in result["unfilled"] if u["Kind"] == "left by a move"]
+    source = Counter(f["Source"] for f in result["fills"])
+    moved = {f["Optimised User Id"] for f in result["fills"]}
+    chains = Counter(f["Chain Level"] for f in result["fills"])
     lines = [
         "# CP-SAT gap filling result",
         "",
@@ -116,25 +128,28 @@ def write_summary(path: Path, problem, slots, result, fills, rides, dropped, unf
         "",
         "| Item | Value |",
         "|---|---|",
-        f"| Crew file | `{args.crew.name}` |",
-        f"| Crew available / removed | {len(problem.crew)} / {len(problem.removed)} |",
-        f"| Seats open in the horizon | {result.seats_open} |",
-        f"| Seats filled | **{result.seats_filled}** ({100 * result.seats_filled / max(result.seats_open, 1):.1f}%) |",
-        f"| Seats left open | {sum(u['Seats Open'] for u in unfilled)} |",
-        f"| Stage 1, coverage | {result.status} (upper bound {result.bound:.0f} seats) |",
-        f"| Stage 2, roster changes | {result.disruption_status} (cost {result.disruption}, lower bound {result.disruption_bound:.0f}) |",
-        f"| Filled by Excess / Relief | {source['Excess']} / {source['Relief']} |",
-        f"| Excess already on the same slot | {same_slot} |",
-        f"| People moved | {len({f['User Id'] for f in fills + rides})} |",
-        f"| Trips across the line as Excess | {len(rides)} |",
-        f"| Standby or Excess rows stood down | {len(dropped)} |",
-        f"| Solve time | {result.seconds:.1f} s |",
+        f"| Solver start (rows before it never change) | {data.rules.solver_start} |",
+        f"| Gaps (Demand rows on leave) | {len(gaps)} |",
+        f"| Locked gaps (before the solver start) | {len(locked)} |",
+        f"| Gaps to fill | {len(to_fill)} |",
+        f"| Gaps filled | **{len(filled_gaps)}** ({100 * len(filled_gaps) / max(len(to_fill), 1):.1f}%) |",
+        f"| Seats left open by a Demand move | {len(opened)} |",
+        f"| Stage 1, coverage | {solved.status} (upper bound {solved.bound:.0f} places, found {solved.places_filled}) |",
+        f"| Stage 2, cost of changes | {solved.cost_status} (cost {solved.cost}, lower bound {solved.cost_bound}) |",
+        f"| Seats filled by Excess / Relief / Demand | {source['Excess']} / {source['Relief']} / {source['Demand']} |",
+        f"| Fills by chain level (0 = gap seat) | {', '.join(f'{k}: {v}' for k, v in sorted(chains.items()))} |",
+        f"| People moved | {len(moved)} |",
+        f"| Trips home as Excess | {len(result['rides'])} |",
+        f"| Rows stood down | {len(result['dropped'])} |",
+        f"| Solve time | {solved.seconds:.1f} s |",
         f"| Rule check | {validation['headline']} |",
         "",
         "## By activity",
         "",
-        "| Activity | Open | Filled |",
+        "| Activity | Gaps to fill | Filled |",
         "|---|---|---|",
     ]
-    lines += [f"| {name} | {seats} | {filled_by[name]} |" for name, seats in sorted(open_by.items())]
+    want = Counter(r["Activity Name"] for r in to_fill)
+    got = Counter(r["Activity Name"] for r in filled_gaps)
+    lines += [f"| {a} | {n} | {got[a]} |" for a, n in sorted(want.items())]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

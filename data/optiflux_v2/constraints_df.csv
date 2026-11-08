@@ -1,6 +1,7 @@
 Constraint,Value,Status
 Planning Horizon Start,2026-11-01,Active
-Planning Horizon Days,28,Active
+Planning Horizon Days,30,Active
+Solver Start Date,2026-11-06,Active
 Shift Length Hours,12,Active
 Ordinary Rest Hours,11,Active
 Transition Rest Hours,23,Active
@@ -16,7 +17,14 @@ Base Return At Swing End,,Active
 Leave In Initial Roster,,Inactive
 No Activity Rows,,Inactive
 Excess Line Fraction,0.10,Active
-Recovery Removal Fraction,0.10,Active
+Leave Full Swing Fraction,0.05,Active
+Leave Day Shifts Fraction,0.02,Active
+Leave Night Shifts Fraction,0.03,Active
+Leave Random Fraction,0.05,Active
 Relief Allowed Start Offsets,ANY,Active
 Excess Allowed Start Offsets,-60;0;60,Active
+Demand Allowed Start Offsets,-60;0;60,Active
+Max Start Changes Per Block,1,Active
+Max Start Change Minutes,60,Active
+Default Is Locked,False,Active
 Random Seed,2026,Active

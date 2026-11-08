@@ -1,0 +1,61 @@
+1) acxtivity name =  off
+activity head = RR
+for rest times
+
+3 3 3 , 16 16 16 is  a feasible pattern
+3 3 3 , 14 14 14 is also feasible pattern
+3 4 4 , 16 16 16 is also feasible
+
+ {this golloows the one change + lift up and layback rule )
+
+make total users to 700 intead of 1000
+
+run optimisation for full month diration
+
+so the rosterr wa running from 1st nov
+but we are running the solver from 6th nov
+okay so the gaps that are getting from 1st to 6th nov will have Is_locked_gap = true
+
+we can only fill gaps that are gtetting created after 6th nov ; si_locked-gap= false
+
+also the users whose swing has started already can only do +- on thagt swing , so they wont be availabel for the allowed options for the furture gaps if they are in their swing from the previosu 1st to 6th noe phase
+we can change the swing time of the furture since that will be fater theier leave , hence it cane be changed
+
+Is_locked = False for all rows (only user can change it thr appliocation , not to be implenenbetd now )
+
+make it into one excel file
+
+activity head ==> who all are eilibilbe for that head ( basically certifaication based eligibikty)
+
+we need a "eligibility_matrix.csv" : activty head ; agaibst that a lost of peole who are eligible for that head
+(basically combine crew-competency and complinace matrux into one csv ad we will use that csv only , not them )
+
+for a gap for a day , just delete that user id for that day and fill it with the new optimisede user id from the cp sat solver
+
+look at the modified roster_full.csv file for the 2 new columns new gap_user id and the optimised_user_id so that we can compoafre the final soution side by side
+
+5% of gthe gaps will have full swing leaves (full 6 day or 14 leaves )
+2% only day shift leaves (basically 3 day + 3 night shift in 6 dau , so this person takes leave for the 3 day shifts)
+3% only night shift leaves (basically 3 day + 3 night shift in 6 dau , so this person takes leave for the 3 night shifts)
+
+5% random leaves (for any amount of days and shifts)
+
+total amount of leaves = 15%
+
+so the gap created can be filled by excess;relief;
+and also by the people in other demand assignmesnts who are eligible for that job + if they satisfy tje lift up and layback rules (+-1)
+only demand job user ids who are eligible + (+-1) rule + any other rules
+if this type of swaqp is made , then that created gap is to be filled by some other gap filling
+
+so basically all types of gap filling is possible maintianing the constranst we have
+
+so we get the list of users that are possible to be alloted to that gap
+{ option-geneartion algorithm folder }
+	so first we straight off reject some user ids or options that cant be alloted to that gap
+	so the first layer of rejection is done bny option gen layer
+
+	then we feed the roster with gaps + knowldfe of eligible optiobns that can fill the gap created
+	then the cp sat solver can start solving the gaps using the options given by option-gen layer and gthe gaps filled
+
+so basicllay we have two layers : option gen + cp-sat
+option-gen is basicaly to reduce the load on the cp-sat solver to fnd solutions (to strike off the infeasible options of the gaps)

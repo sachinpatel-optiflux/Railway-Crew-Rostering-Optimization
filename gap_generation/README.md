@@ -1,105 +1,58 @@
-# gap_generation: make some crew unavailable
+# gap_generation: put crew on leave and write roster_full.csv
 
-This folder creates a test scenario for the recovery step: a chosen percentage
-of crew becomes unavailable, which leaves gaps in the roster.
+Layer 0 of the gap-filling pipeline. The next layers are `option_generation/` and then `CP-SAT/`.
+The rules are in `data/optiflux_v2/source/rules/gap_filling_rules.md`.
 
-The script picks those people at random and writes a reduced copy of the crew
-list. **The original `data/optiflux_v2/crew_master_data_df.csv` is only read,
-never changed.**
-
-## How to run
-
-Run from the repository root. Only standard Python is needed, no extra packages.
+The script puts 15% of the crew on leave and writes the roster with the gaps that leave creates. The
+input tables in `data/optiflux_v2` are only read.
 
 ```bash
-python gap_generation/make_gaps.py --percent 5     # remove 5% of crew
-python gap_generation/make_gaps.py --percent 10    # remove 10% of crew
+python gap_generation/make_gaps.py                 # seed 2026, writes gap_generation/output/
+python gap_generation/make_gaps.py --seed 7 --output-dir gap_generation/output_seed7
+python scripts/run_pipeline.py                     # all layers + Excel workbook
 ```
 
-| Option | Required | Default | Meaning |
-|---|---|---|---|
-| `--percent` | yes | none | Share of crew to remove, above 0 and below 100. `5`, `7.5` and `5%` all work |
-| `--seed` | no | `2026` | Random seed. Change it to get a different group of people |
-| `--input` | no | `data/optiflux_v2/crew_master_data_df.csv` | Crew file to read |
-| `--output` | no | `gap_generation/crew_with_gaps.csv` | Reduced crew file to write |
+## Leave mix (G2)
 
-## What it creates
+The shares come from `constraints_df.csv`. Each person gets one leave, and every leave falls inside one swing.
+
+| Leave type | Share of crew (700) | People | Rows on leave |
+|---|---|---|---|
+| Full Swing | 5% | 35 | every shift of one swing (6 Residential, 14 FIFO). A FIFO person's travel rows for that swing are cancelled too |
+| Day Shifts | 2% | 14 | the 3 day shifts of a 6-day Residential swing |
+| Night Shifts | 3% | 21 | the 3 night shifts of a 6-day Residential swing |
+| Random | 5% | 35 | a run of 1 or more consecutive shifts inside one swing |
+
+## Output
 
 | File | Content |
 |---|---|
-| `crew_with_gaps.csv` | The crew who are still available. Same columns and row order as the original |
-| `removed_crew.csv` | The crew who were removed, with the same columns. Always written next to `crew_with_gaps.csv` |
+| `output/roster_full.csv` | `roster_df.csv` plus the columns below |
+| `output/leave_plan.csv` | One row per leave: person, type, dates, number of gaps, number of locked gaps |
 
-Every run **overwrites** these two files. To keep several scenarios, give each
-its own folder:
+Columns added to `roster_full.csv`:
 
-```bash
-python gap_generation/make_gaps.py --percent 5  --output gap_generation/gaps_05/crew_with_gaps.csv
-python gap_generation/make_gaps.py --percent 10 --output gap_generation/gaps_10/crew_with_gaps.csv
-```
+| Column | Meaning |
+|---|---|
+| `New User Id` | Right after `User Id`. Who works the row after leave. **Blank on leave rows** (G3) |
+| `Optimised User Id` | **Always blank here.** CP-SAT fills it only after the whole pipeline has run (G4) |
+| `Leave Type` | The leave type for rows on leave, else blank |
+| `Is Gap` | True for a Demand row on leave: a seat now has nobody on it. Excess and Relief rows on leave are not gaps |
+| `Is_locked_gap` | On gaps only. True before the solver start (6 Nov): those days have happened and are never filled (G1). False from 6 Nov on |
 
-## Example output
+## Example run (seed 2026)
 
 ```text
-$ python gap_generation/make_gaps.py --percent 10
-Crew: 1000 -> 900 (100 removed, 10%, seed 2026)
-  Depot: Haskett -45/400, Nelaway -31/300, Yarmouth -24/300
-  Classification: FIFO -44/500, Residential -56/500
-  Role: Conductor -5/60, Driver -88/880, Shunter -7/60
-Their shifts in the horizon: 1450 (Demand 414, Excess 85, Relief 879, Travel In 39, Travel Out 33)
+Leave: 105 of 700 crew (Random 35, Full Swing 35, Day Shifts 14, Night Shifts 21)
+Rows on leave: 704 (Demand 296, Excess 89, Relief 281, Travel In 19, Travel Out 19)
+Gaps (Demand rows on leave): 296; locked (before 2026-11-06): 38; to fill: 258
 ```
 
-- `Haskett -45/400` means 45 of the 400 Haskett crew were removed.
-- The last line counts the removed people's shifts inside the planning horizon
-  (`In Horizon = Yes` in `roster_df.csv`), by `Assignment Type`.
-- **Demand** shifts are the real gaps, because each one is a required seat that
-  now has nobody on it. Here that is 414 of the 4,788 Demand shifts in the
-  horizon.
-- This line is only shown when `roster_df.csv` sits next to the input file.
+## How it picks
 
-| Percent (seed 2026) | Crew left | Demand shifts left open |
-|---|---|---|
-| 5% | 950 | 191 |
-| 10% | 900 | 414 |
-
-## How the code works
-
-Everything is in `make_gaps.py`, and it runs these steps in order:
-
-1. **Check the inputs.** `parse_percent` rejects anything that isn't a number
-   above 0 and below 100. `main` stops if an output path is the same as the
-   input, if `User Id` is missing, or if a `User Id` appears twice.
-2. **Read the crew file** (`read_csv`). One row is one person.
-3. **Work out how many to remove.** `pick_removed` uses
-   `round(crew count × percent / 100)`, and always removes at least 1.
-   With 1,000 crew, 5% is 50 people.
-4. **Pick the people.** `pick_removed` sorts the `User Id`s, shuffles them with
-   the seed, and takes that many from the front.
-5. **Split the rows.** Each row goes to either the kept list or the removed
-   list. Both keep the original row order.
-6. **Write the two files** (`write_csv`).
-7. **Print the summary** (`print_summary`, `open_shifts`). This step only reads
-   data, and changes neither output file.
-
-### Why the selection works this way
-
-- **Everyone has the same chance.** The pick is plain random across all crew,
-  so nobody is protected and it doesn't balance depots or roles. A depot can
-  lose slightly more than its share: at 5%, Haskett lost 24 and Yarmouth 9. A
-  small group, such as a four-person roster line, can also lose several people.
-- **Same inputs, same result.** The same percent, seed and input always give
-  identical files, so a scenario can be repeated exactly.
-- **Bigger percentages add to smaller ones.** With the same seed, everyone in
-  the 5% group is also in the 10% group. Comparing 5% with 10% therefore shows
-  the effect of more absences, not of a different random group.
-
-## Limits
-
-- **Only the crew list changes.** `roster_df.csv`, `crew_competencies_df.csv`
-  and `crew_currency_df.csv` still contain the removed people. Use
-  `removed_crew.csv` to find their rows.
-- **The solver can't use this output yet.** `load_instance` can't read the
-  `optiflux_v2` format (see `data/optiflux_v2/README.md`), and it also expects
-  the file name `crew_master_data_df.csv`, not `crew_with_gaps.csv`.
-- **Absence covers the whole period.** A removed person is gone for all of it,
-  not for a few days.
+1. It considers only swings that lie wholly inside the horizon (1–30 Nov).
+2. It shuffles the people with the seed and hands out the leave types in this order: Day Shifts,
+   Night Shifts, Full Swing, Random. The two types that need a 3 + 3 Residential swing go first, so
+   they always find one.
+3. For each person it picks one of their swings at random. For a Random leave it then picks the
+   length and the start of the run at random.

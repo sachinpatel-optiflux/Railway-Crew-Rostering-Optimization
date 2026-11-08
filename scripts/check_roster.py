@@ -19,15 +19,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DIR = ROOT / "data" / "optiflux_v2"
 
-CREW_TARGETS = {  # crew_master_data_changes.txt
-    ("Haskett", "Residential"): 300,
-    ("Haskett", "FIFO"): 100,
-    ("Yarmouth", "FIFO"): 300,
-    ("Nelaway", "Residential"): 200,
-    ("Nelaway", "FIFO"): 100,
+CREW_TARGETS = {  # crew_master_data_changes.txt mix, cut to 700 crew by gap_filling_rules.md R2
+    ("Haskett", "Residential"): 210,
+    ("Haskett", "FIFO"): 70,
+    ("Yarmouth", "FIFO"): 210,
+    ("Nelaway", "Residential"): 140,
+    ("Nelaway", "FIFO"): 70,
 }
 WORK = ("Demand", "Excess", "Relief")
 TRAVEL = ("Travel In", "Travel Out")
+OFF = ("Off",)
 SWING_BREAK = timedelta(hours=48)  # longer gap between two shifts = a new swing
 MAX_EXAMPLES = 3
 
@@ -74,6 +75,8 @@ def run(data_dir: Path) -> Checks:
     rest_h = float(cons["Ordinary Rest Hours"][0])
     trans_h = float(cons["Transition Rest Hours"][0])
     lo, hi = (int(t[:2]) * 60 + int(t[3:]) for t in cons["Day Shift Window"][0].split("-"))
+    max_changes = int(cons.get("Max Start Changes Per Block", ("1", ""))[0])
+    max_change_min = int(cons.get("Max Start Change Minutes", ("60", ""))[0])
     on_off = {c: tuple(int(x) for x in cons[f"{c} Work/Off Days"][0].split("/")) for c in ("FIFO", "Residential")}
 
     def is_day(t: datetime) -> bool:
@@ -89,7 +92,7 @@ def run(data_dir: Path) -> Checks:
     ids = [r["Assignment ID"] for r in roster]
     ck.add("—", "Assignment IDs are unique", [i for i, n in Counter(ids).items() if n > 1])
     ck.add("—", "Every row's activity exists; Assignment Type is known",
-           [r["Assignment ID"] for r in roster if r["Activity ID"] not in acts or r["Assignment Type"] not in WORK + TRAVEL])  # fmt: skip
+           [r["Assignment ID"] for r in roster if r["Activity ID"] not in acts or r["Assignment Type"] not in WORK + TRAVEL + OFF])  # fmt: skip
     ck.add("—", "`In Horizon` matches the start date",
            [r["Assignment ID"] for r in roster if (r["In Horizon"] == "Yes") != (start <= r["_s"].date() < start + timedelta(days=days))])  # fmt: skip
     ck.add("D1", "Demand `Shift` holds a start time only (HH:MM)",
@@ -131,8 +134,22 @@ def run(data_dir: Path) -> Checks:
     ck.add("G9", "Initial roster has no leave (crew_restrictions empty, everyone Fit)",
            [r.get("Restriction ID", "?") for r in restrictions] + [u for u, c in crew.items() if c["Medical"] != "Fit"])  # fmt: skip
     ck.add("G2", "No 'no activity' rows yet (deferred)", [r["Assignment ID"] for r in roster if not r["Activity ID"]])
-    ck.add("—", "Is Locked: Yes for Demand and Travel, No for Excess and Relief (free for the recovery step)",
-           [r["Assignment ID"] for r in roster if (r["Is Locked"] == "Yes") != (r["Assignment Type"] in ("Demand",) + TRAVEL)])  # fmt: skip
+    ck.add("R4", "Is Locked = False on every row (only a user locks rows, in the application)",
+           [r["Assignment ID"] for r in roster if r["Is Locked"] != "False"])  # fmt: skip
+
+    # ---- Off rows (gap_filling_rules.md R1) ----------------------------------------------------------------
+    offs = [r for r in roster if r["Assignment Type"] in OFF]
+    ck.add("OFF", "Off rows: Activity Name Off, Activity Head RR, inside the horizon, no Demand ID",
+           [r["Assignment ID"] for r in offs if not (r["Activity Name"] == "Off" and r["Activity Head"] == "RR"
+            and r["In Horizon"] == "Yes" and not r["Demand ID"])]
+           + [r["Assignment ID"] for r in roster if r["Activity Head"] == "RR" and r["Assignment Type"] not in OFF])  # fmt: skip
+    in_swing: dict[str, set[date]] = defaultdict(set)
+    for r in sorted(work, key=lambda r: r["_s"]):
+        in_swing[r["User Id"]].add(r["_s"].date())
+    off_days = Counter((r["User Id"], r["_s"].date()) for r in offs)
+    f_off_rows = [f"{u} {d} x{n}" for (u, d), n in off_days.items() if n > 1]
+    f_off_rows += [f"{u} {d} has a shift" for (u, d) in off_days if d in in_swing[u]]
+    ck.add("OFF", "At most one Off row per person per day, never on a day with a shift", f_off_rows)
 
     # ---- shift length (D2) ---------------------------------------------------------------------------------
     ck.add("D2", f"Every work row lasts {shift_h} h",
@@ -157,9 +174,12 @@ def run(data_dir: Path) -> Checks:
     per_user: dict[str, list[dict]] = defaultdict(list)
     travel_of: dict[str, list[dict]] = defaultdict(list)
     for r in sorted(roster, key=lambda r: r["_s"]):
-        (per_user if r["Assignment Type"] in WORK else travel_of)[r["User Id"]].append(r)
-    f_overlap, f_rest, f_trans, f_daily, f_swing_len, f_off, f_r1, f_loc, f_base, f_travel, f_res_travel = (
-        [] for _ in range(11)
+        if r["Assignment Type"] in WORK:
+            per_user[r["User Id"]].append(r)
+        elif r["Assignment Type"] in TRAVEL:
+            travel_of[r["User Id"]].append(r)
+    f_overlap, f_rest, f_trans, f_daily, f_swing_len, f_off, f_r1, f_loc, f_base, f_travel, f_res_travel, f_pat = (
+        [] for _ in range(12)
     )
     for uid, rows in per_user.items():
         c = crew.get(uid)
@@ -194,6 +214,20 @@ def run(data_dir: Path) -> Checks:
                 f_r1.append(f"{uid} swing from {sw[0]['Start Date']} starts {sw[0]['Shift Start Time']}")
             if sw[0]["Start Location"] != c["Depot"] or sw[-1]["End Location"] != c["Depot"]:
                 f_base.append(f"{uid} swing from {sw[0]['Start Date']}")
+            # F3: in a block (run of day shifts or of night shifts), the start time changes at most once, by <= 1 h.
+            # Relief standby rows have no fixed start, so only worked shifts (Demand, Excess) count.
+            worked = [r for r in sw if r["Assignment Type"] != "Relief"]
+            changes = 0
+            for prev, cur in zip(worked, worked[1:]):
+                if is_day(prev["_s"]) != is_day(cur["_s"]):
+                    changes = 0  # a new block
+                    continue
+                a, b = (x["_s"].hour * 60 + x["_s"].minute for x in (prev, cur))
+                step = min(abs(a - b), 1440 - abs(a - b))
+                if step:
+                    changes += 1
+                    if step > max_change_min or changes > max_changes:
+                        f_pat.append(f"{uid} {cur['Assignment ID']} ({prev['Shift Start Time']}->{cur['Shift Start Time']})")
             for r in sw:
                 a = acts[r["Activity ID"]]
                 want = (a["Start Depot"], a["End Depot"]) if a["Start Depot"] else (c["Depot"], c["Depot"])
@@ -237,6 +271,7 @@ def run(data_dir: Path) -> Checks:
         f_travel,
     )
     ck.add("F1", "Residential crew have no travel rows", f_res_travel)
+    ck.add("F3", f"Start time changes at most {max_changes}x per day/night block, by at most {max_change_min} min", f_pat)
 
     # ---- eligibility -------------------------------------------------------------------------------------------
     codes_of: dict[str, set[str]] = defaultdict(set)
@@ -272,6 +307,21 @@ def run(data_dir: Path) -> Checks:
     ck.add("—", "The person's Role is allowed by the activity's Roles/Job", f_role)
     ck.add("—", "The person holds every competency the activity needs, valid on the duty date", f_comp)
     ck.add("—", "Currency: the activity head was performed within its threshold before each duty", f_cur)
+
+    # ---- eligibility_matrix.csv (gap_filling_rules.md R5) ---------------------------------------------------------
+    matrix_path = data_dir / "eligibility_matrix.csv"
+    f_matrix = [] if matrix_path.exists() else ["eligibility_matrix.csv is missing"]
+    if matrix_path.exists():
+        last_day = horizon[-1]
+        matrix = {m["Activity ID"]: m for m in read_csv(matrix_path)}
+        for aid, codes in codes_of.items():
+            want = sorted(u for u, h in held.items() if all(h.get(code, date.min) >= last_day for code in codes))
+            m = matrix.get(aid)
+            if m is None:
+                f_matrix.append(f"{aid} missing")
+            elif [u for u in m["Eligible User Ids"].split(";") if u] != want or m["Activity Head"] != acts[aid]["Activity Head"]:
+                f_matrix.append(f"{aid} differs")
+    ck.add("R5", "eligibility_matrix.csv = crew_competencies_df joined with compliance_matrix_df", f_matrix)
     return ck
 
 

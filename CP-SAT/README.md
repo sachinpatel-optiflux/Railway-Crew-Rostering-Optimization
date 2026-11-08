@@ -1,107 +1,101 @@
-# CP-SAT: fill the roster gaps with Excess and Relief crew
+# CP-SAT: layer 2, choose the options and fill `Optimised User Id`
 
-This folder is the recovery step (rule G10). It takes the reduced crew list from
-`gap_generation/`, finds the Demand seats nobody is on, and uses OR-Tools CP-SAT to move Excess and
-Relief crew onto them.
-
-## How to run
-
-Run from the repository root, after `pip install -r requirements.txt`.
+This layer reads what `option_generation/` wrote (`seats.csv`, `swings.csv`, `options.csv`) and uses
+OR-Tools CP-SAT to choose one option per row. It then writes the result into `roster_full.csv`. It never
+adds options of its own. The rules are in `data/optiflux_v2/source/rules/gap_filling_rules.md`.
 
 ```bash
-python CP-SAT/run_gap_filling.py
-python CP-SAT/run_gap_filling.py --crew gap_generation/gaps_10/crew_with_gaps.csv
+python gap_generation/make_gaps.py
+python option_generation/generate_options.py
+python CP-SAT/run_gap_filling.py --time-limit 120
+# or all of it, plus the Excel workbook:
+python scripts/run_pipeline.py
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--crew` | `gap_generation/crew_with_gaps.csv` | Reduced crew list. Anyone missing from it counts as removed |
-| `--data-dir` | `data/optiflux_v2` | The other tables. Only read, never changed |
-| `--output-dir` | `CP-SAT/outputs/<crew file name>` | Where results go. A rerun overwrites them |
-| `--time-limit` | `300` | Seconds per stage. The run stops early once a stage is proven optimal |
-| `--workers` | `8` | CP-SAT threads |
-| `--allow-stand-down` | off | Let the solver remove standby or Excess rows. See the assumptions below |
-| `--no-return-rides` | off | Turn off trips across the line as Excess |
-| `--log` | off | Print the CP-SAT search log |
+| `--roster-full` | `gap_generation/output/roster_full.csv` | Roster with gaps |
+| `--options-dir` | `option_generation/output` | Layer 1 output |
+| `--output-dir` | `CP-SAT/outputs/roster_full` | Where results go. A rerun overwrites them |
+| `--time-limit` | 120 | Seconds per stage |
+| `--workers` | 8 | CP-SAT threads |
 
-With several workers, two runs can give different assignments of equal cost.
+## Output (`CP-SAT/outputs/roster_full/`)
+
+| File | Content |
+|---|---|
+| `roster_full.csv` | The roster with `User Id`, `New User Id` and **`Optimised User Id`** side by side, plus `Optimisation Note` on every changed row |
+| `reassignments.csv` | One row per filled seat: the row, who had it, who has it now, where they came from, the start change and the chain level |
+| `unfilled_gaps.csv` | Demand rows still empty: locked gaps, gaps with no legal filler, and seats left by a move (if any) |
+| `validation.md` | The rule checks (see below) |
+| `summary.md` | The headline numbers |
+| `optiflux_all_tables.xlsx` | Written by `scripts/run_pipeline.py`: every CSV of the run (base data, gaps, options, result) as its own sheet |
+
+In `roster_full.csv`, `Optimised User Id` starts as `New User Id` and changes only where someone moved:
+
+- the row they left becomes blank: a standby row, an Excess row, or their own Demand seat;
+- the row of the seat they took gets their id: a gap row, or a row its holder left.
+
+## The model
+
+- **Rows.** Each row of a swing in the model gets exactly one of its options (keep, fill, ride), or is
+  dropped if layer 1 allowed that.
+- **Sequence.** One `AddCircuit` per swing. A path through it is the shifts the person really works,
+  so rest, day/night switches, location, home base and the Residential day-first rule hold between
+  consecutive shifts.
+- **Seats.** A seat has room for `Demand - Fixed Occupants`. A Demand person's `keep` uses a place on
+  their own seat. If they move, that place is free for someone else. This is how chains work (F2).
+- **Start-time pattern (F3).** Each block (the day shifts or the night shifts of a swing) has a base
+  start B, a changed start N at most 60 min away, and one switch point. Worked shifts before the
+  switch start at B and those after it at N, so `03 04 04` is allowed but `03 04 03` and `03 05 05`
+  are not. Relief standby rows have no fixed start and are left out.
+- **Excess (G5).** An Excess row may only stay on a seat that is fully covered.
+- **Stage 1** fills as many places as possible. Activity priority only breaks ties.
+- **Stage 2** holds that coverage and makes the cheapest change. The costs are `Costs` in
+  `option_generation/options.py`:
+
+  | Change | Cost |
+  |---|---|
+  | Excess already on the seat | 0 |
+  | Relief | 10 + 1 per hour between standby time and duty |
+  | Excess moved | 20 + 1 per hour |
+  | Trip home | 30 |
+  | Demand moved | 40 + 1 per hour |
+
+## Validation
+
+`scripts/check_roster.py` runs twice: on the roster after leave and on the optimised roster. Leave on
+its own already breaks some rules: open seats (G1), Excess on a short seat (G5), a swing that now starts
+on a night shift (R1), and a swing cut in two (off time, travel). Those show as
+`fails after leave too`. A check that fails **only** after optimisation is a real failure.
+
+Recovery checks V1–V6 are added on top:
+
+- rows before 6 Nov are unchanged;
+- no seat is over its demand;
+- every filler is certified, fit, in an allowed role and current;
+- frozen swings lose no rows;
+- every changed person keeps rest, location and the one-change start pattern.
+
+## Result (seed 2026, 120 s per stage)
+
+| Item | Value |
+|---|---|
+| Gaps | 296 (38 locked before 6 Nov, 258 to fill) |
+| Filled | 242 of 258 (93.8%) |
+| Fillers | about 54 Excess, 188 Relief and 38 Demand moves, with 25 + 13 refills further down the chains |
+| Rule check | no unexpected failure |
+
+Most unfilled gaps are on 6–7 Nov. Most crew working those days are partway through a swing that
+started before 6 Nov, so F4 does not allow them to move. Stage 1 usually stops at the time limit 1–2
+places short of its bound. With several workers, two runs can give different rosters of equal quality.
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `run_gap_filling.py` | Command line entry point |
-| `solver.py` | The CP-SAT model, the two solve stages and the stage 2 costs (`Costs`) |
-| `utils/data.py` | Loads the tables |
-| `utils/rules.py` | Reads `constraints_df.csv`; the rest, location and day/night check between two shifts |
-| `utils/gaps.py` | Finds the open seats |
-| `utils/options.py` | Eligibility, swings, and the legal replacements for each row |
-| `utils/output.py` | Builds the recovered roster and the report files |
-| `utils/validate.py` | Runs `scripts/check_roster.py` on the result, plus checks R1-R4 |
-| `outputs/` | Results. Ignored by git (the `outputs/` rule in `.gitignore`) |
-
-## Output files
-
-| File | Content |
-|---|---|
-| `summary.md` | The headline numbers |
-| `recovered_roster_df.csv` | The new roster, in the `roster_df.csv` format. Removed crew are gone |
-| `reassignments.csv` | One row per filled seat: who took it, and what they were doing before |
-| `return_trips.csv` | Trips across the line as Excess |
-| `unfilled_gaps.csv` | Seats still open |
-| `stood_down_rows.csv` | Rows removed. Empty unless `--allow-stand-down` is on |
-| `validation.md` | Every rule check and its result |
-
-## How the model works
-
-**Gaps.** For each activity, start time and horizon day, a gap is demand minus the Demand rows of the
-remaining crew. Excess and Relief rows of removed crew are not gaps (rule G7).
-
-**Decisions.** Each unlocked Excess or Relief row inside the horizon can stay as it is, or be replaced
-by a gap. Everything else is fixed: Demand rows, travel rows and rows outside the horizon. Every
-replacement uses one existing row, so swing lengths never grow and nobody is called in on a day off.
-
-| Row type | Which gaps it can take |
-|---|---|
-| Relief | Any start time on the same date (`Relief Allowed Start Offsets = ANY`) |
-| Excess | Start time changed by -60, 0 or +60 minutes (`Excess Allowed Start Offsets`) |
-
-**Hard rules.** A person is a candidate only if eligibility, role, medical, competencies and currency
-all pass. Each swing that could help gets one `AddCircuit`, and a path through it is the sequence of
-shifts the person works. That enforces, on consecutive shifts:
-
-- 11 h rest, 23 h on a day/night switch, and one shift per day
-- starting each shift where the last one ended
-- starting and ending the swing at home
-- a Residential swing starting on a day shift (R1)
-- staying between Travel In and Travel Out, and keeping the full off days between swings
-
-An Excess row can only stay on a slot that is fully covered (G5).
-
-**Two stages.**
-
-1. Fill as many seats as possible. Activity priority only breaks ties.
-2. Keep that number of seats and change the roster as little as possible.
-
-Stage 2 prefers, in order: an Excess person already on that slot, then the Relief person with the
-closest standby time, then moving an Excess person. The penalties are in `Costs` in `solver.py`.
-
-## Assumptions to confirm
-
-- **Trips across the line as Excess.** Work Train ends at Yarmouth and has no return duty, so a
-  replacement can ride Yarmouth Mainline 22:00 as Excess, as the initial roster does (Q12). Crew based
-  at Yarmouth can also use this seat to reach Haskett first. It is the only seat allowed, and only on
-  a slot that is already full. Without these trips, the 14 Work Train seats stay open.
-- **Residential crew on mainline work.** The initial roster uses FIFO crew for the mainlines, but
-  `Eligibility` also lists Residential drivers at Haskett, so the solver may use them.
-- **Standby rows stay.** By default nobody loses a standby row. `--allow-stand-down` gives a much
-  larger model that did not reach the optimum in 5 minutes, and it was not needed for full coverage.
-- **Mentors are not enforced.** Work Train has `Mentor Required = Yes`, but nobody is a mentor yet (Q6).
-- **Rows outside the horizon are not refilled.** Removed crew also leave Demand rows before 1 Nov and
-  after 28 Nov. Those seats are not gaps here, and they are not in the recovered roster.
-
-## The expected rule failure
-
-`scripts/check_roster.py` always fails M1-M4, because removing people puts the crew counts below the
-targets. `validation.md` marks it as expected. If seats stay open, G1 fails too and is marked the same
-way. The run exits with an error for any other failure.
+| `solver.py` | The CP-SAT model and the two stages |
+| `utils/load_options.py` | Reads the layer 1 files |
+| `utils/output.py` | Writes `Optimised User Id`, the reports and the summary |
+| `utils/validate.py` | The checker comparison and checks V1–V6 |

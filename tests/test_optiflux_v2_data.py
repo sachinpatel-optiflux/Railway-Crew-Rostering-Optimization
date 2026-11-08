@@ -17,7 +17,7 @@ GENERATED = [
     "excluded_activities.csv", "constraints_df.csv", "crew_restrictions.csv", "Crew_Onsite_App.csv",
     # scripts/roster_making.py
     "roster_df.csv", "crew_master_data_df.csv", "crew_competencies_df.csv", "crew_currency_df.csv",
-    "roster_lines.csv", "roster_report.md",
+    "roster_lines.csv", "roster_report.md", "eligibility_matrix.csv",
     # scripts/check_roster.py --write-report
     "roster_checks.md",
 ]  # fmt: skip
@@ -102,12 +102,12 @@ def test_per_person_tables_use_user_id_not_cm_id():
 
 @pytest.mark.parametrize(
     "depot, classification, n",
-    [("Haskett", "Residential", 300), ("Haskett", "FIFO", 100), ("Yarmouth", "FIFO", 300),
-     ("Nelaway", "Residential", 200), ("Nelaway", "FIFO", 100)],
+    [("Haskett", "Residential", 210), ("Haskett", "FIFO", 70), ("Yarmouth", "FIFO", 210),
+     ("Nelaway", "Residential", 140), ("Nelaway", "FIFO", 70)],  # gap_filling_rules.md R2: 700 crew
 )  # fmt: skip
 def test_crew_counts(depot, classification, n):
     crew = _rows("crew_master_data_df.csv")
-    assert len(crew) == len({c["User Id"] for c in crew}) == 1000
+    assert len(crew) == len({c["User Id"] for c in crew}) == 700
     assert Counter((c["Depot"], c["Classification"]) for c in crew)[(depot, classification)] == n
 
 
