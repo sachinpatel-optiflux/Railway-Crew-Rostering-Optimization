@@ -87,11 +87,17 @@ def test_cp_sat_blocks_new_residential_night_start_but_keeps_existing(
     config = tmp_path / "config.yml"
     config.write_text(
         "constraints:\n"
-        f"  residential_start_restriction: {'true' if restriction else 'false'}\n"
-        "  relief_only_day_night_transition: false\n",
+        + "\n".join(
+            (
+                f"  residential_start_restriction: {str(restriction).lower()}",
+                "  relief_only_day_night_transition: false",
+            )
+        )
+        + "\n",
         encoding="utf-8",
     )
     rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"), config)
+    assert rules.residential_start_restriction is restriction
     rules = replace(
         rules,
         rest=timedelta(hours=8),
@@ -139,12 +145,19 @@ def test_cp_sat_enforces_relief_only_day_night_transition(
     config = tmp_path / "config.yml"
     config.write_text(
         "constraints:\n"
-        "  residential_start_restriction: true\n"
-        f"  relief_only_day_night_transition: {'true' if enabled else 'false'}\n",
+        + "\n".join(
+            (
+                "  residential_start_restriction: true",
+                f"  relief_only_day_night_transition: {str(enabled).lower()}",
+            )
+        )
+        + "\n",
         encoding="utf-8",
     )
+    loaded_rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"), config)
+    assert loaded_rules.residential_start_restriction is True
     rules = replace(
-        Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"), config),
+        loaded_rules,
         rest=timedelta(hours=8),
         transition_rest=timedelta(hours=8),
         day_from=6 * 60,
