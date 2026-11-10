@@ -55,8 +55,26 @@ def run_checker(checker, data_dir: Path, data: Data, rows: list[dict]):
 
 def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, str]]) -> list[tuple]:
     rules = data.rules
-    changed_people = {r["Optimised User Id"] for r in roster if r["Optimised User Id"] != r["New User Id"]} - {""}
     by_id = {r["Assignment ID"]: r for r in roster}
+
+    def source_assignment(row: dict) -> dict | None:
+        note = row.get("Optimisation Note", "")
+        if note.startswith("filled by ") and note.endswith(")") and ", from " in note:
+            source_id = note.rsplit(", from ", 1)[1][:-1]
+            return by_id.get(source_id)
+        return None
+
+    def is_changed_assignment(row: dict) -> bool:
+        if row["Optimised User Id"] != row["New User Id"]:
+            return True
+        if row.get("Optimisation Note", "").startswith("filled by "):
+            source = source_assignment(row)
+            return source is None or source["_s"] != row["_s"] or source["Activity ID"] != row["Activity ID"]
+        return False
+
+    changed_people = {
+        r["Optimised User Id"] for r in roster if r["Optimised User Id"] and is_changed_assignment(r)
+    }
     before_start = [r["Assignment ID"] for r in roster if r["_s"].date() < rules.solver_start
                     and r["Optimised User Id"] != r["New User Id"]]  # fmt: skip
     per_seat = Counter((r["Activity ID"], r["_s"]) for r in roster
@@ -91,17 +109,14 @@ def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, 
             seq[user].append(r)
             if (rules.residential_start_restriction
                     and data.crew[user]["Classification"] == "Residential"
-                    and user != r["New User Id"]
+                    and is_changed_assignment(r)
                     and not rules.residential_start_allowed(r["_s"])):
                 residential_start_violations.append(f"{user} {r['Assignment ID']} starts at {r['_s']:%H:%M}")
 
     def source_type(row: dict) -> str:
-        note = row.get("Optimisation Note", "")
-        if note.startswith("filled by ") and note.endswith(")") and ", from " in note:
-            source_id = note.rsplit(", from ", 1)[1][:-1]
-            source_row = by_id.get(source_id)
-            if source_row is not None:
-                return source_row["Assignment Type"]
+        source = source_assignment(row)
+        if source is not None:
+            return source["Assignment Type"]
         return row["Assignment Type"]
 
     bad = []

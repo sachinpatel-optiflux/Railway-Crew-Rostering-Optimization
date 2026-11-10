@@ -105,6 +105,35 @@ def test_validator_honors_disabled_residential_start_restriction():
     assert check_failures(check(rules, [changed]), "V7") == []
 
 
+def test_recovery_sequence_does_not_duplicate_a_changed_work_assignment():
+    rules = make_rules()
+    start = datetime(2026, 11, 7, 6)
+    changed = row("CHANGED", "Demand", start, start + timedelta(hours=8), "U2", "U1")
+
+    assert check_failures(check(rules, [changed]), "V6") == []
+
+
+def test_validator_detects_restricted_start_when_user_id_is_unchanged():
+    rules = make_rules()
+    source_start = datetime(2026, 11, 7, 6)
+    source = row("SOURCE", "Demand", source_start, source_start + timedelta(hours=8), "U1", "")
+    source["Optimisation Note"] = "U1 moved to target"
+    changed_start = datetime(2026, 11, 8, 23)
+    changed = row(
+        "TARGET",
+        "Demand",
+        changed_start,
+        changed_start + timedelta(hours=8),
+        "U1",
+        "U1",
+        "filled by U1 (Demand, from SOURCE)",
+    )
+
+    assert check_failures(check(rules, [source, changed]), "V7") == [
+        "U1 TARGET starts at 23:00"
+    ]
+
+
 @pytest.mark.parametrize(
     ("enabled", "previous_type", "previous_source", "violation"),
     [
