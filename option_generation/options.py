@@ -214,6 +214,11 @@ def try_fill(data: Data, swing: Swing, index: int, seat: Seat, costs: Costs) -> 
         return None, "row before the solver start or locked (G1)"
     if swing.status != "movable" and not same_seat:
         return None, swing.reason
+    if (data.rules.residential_start_restriction
+        and swing.classification == "Residential"
+        and not same_seat
+        and not data.rules.residential_start_allowed(seat.start)):
+        return None, "Residential crew cannot start a shift between 22:00 and 02:00"
     if typ == "Relief":
         if row["_s"].date() != seat.start.date():
             return None, "different day"
@@ -245,6 +250,9 @@ def ride_options(data: Data, swing: Swing, index: int, target_keys: set[str], co
     for activity_id, shift in RETURN_RIDES:
         start = datetime.fromisoformat(f"{row['_s'].date().isoformat()}T{shift}")
         key = seat_key(activity_id, start)
+        if (data.rules.residential_start_restriction and swing.classification == "Residential"
+                and not data.rules.residential_start_allowed(start)):
+            continue
         if key in target_keys or why_not_eligible(data, swing.user, activity_id, start.date()):
             continue
         activity = data.activities[activity_id]
