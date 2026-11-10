@@ -31,7 +31,7 @@ SWING_HEADER = ["Swing Key", "User Id", "Swing", "Classification", "Home Depot",
                 "Latest End", "In Model", "Rows", "Droppable Rows"]  # fmt: skip
 OPTION_HEADER = ["Option ID", "Swing Key", "User Id", "Row Index", "Assignment ID", "Row Type", "Kind", "Activity ID",
                  "Start", "End", "Start Location", "End Location", "Demand ID", "Seat Key", "Excess Seat Key",
-                 "Standby", "Offset Minutes", "Cost", "Chain Level"]  # fmt: skip
+                 "Standby", "Offset Minutes", "Cost", "Chain Level", "Unchanged"]  # fmt: skip
 CANDIDATE_HEADER = ["Seat Key", "Chain Level", "Date", "Start", "Activity Name", "Open Seats", "Gap Assignment IDs",
                     "Candidate User Id", "Source", "Candidate Row", "Candidate Row Start", "Offset Minutes", "Cost"]  # fmt: skip
 REJECTION_HEADER = ["Seat Key", "Reason", "Rows Rejected"]
@@ -82,6 +82,7 @@ def write_outputs(data: Data, gen: Generated, out: Path, args) -> dict:
                     "Start Location": o.start_loc, "End Location": o.end_loc, "Demand ID": o.demand_id,
                     "Seat Key": o.seat, "Excess Seat Key": o.excess_seat, "Standby": str(o.standby),
                     "Offset Minutes": o.offset, "Cost": o.cost, "Chain Level": o.level if o.kind == "fill" else "",
+                    "Unchanged": str(o.unchanged),
                 })  # fmt: skip
                 if o.kind == "fill":
                     s = gen.seats[o.seat]

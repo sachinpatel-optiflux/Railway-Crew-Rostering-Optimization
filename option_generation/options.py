@@ -66,6 +66,7 @@ class Option:
     offset: int = 0  # start change in minutes
     cost: int = 0
     level: int = -1  # chain level of the seat (fill only)
+    unchanged: bool = False  # same existing assignment, even when represented as a fill option
 
 
 @dataclass
@@ -167,7 +168,8 @@ def keep_option(data: Data, index: int, row: dict) -> Option:
     key = seat_key(row["Activity ID"], row["_s"])
     return Option(index, "keep", row["_s"], row["_e"], row["Start Location"], row["End Location"],
                   row["Activity ID"], row["Demand ID"], seat=key if typ == "Demand" else "",
-                  excess_seat=key if typ == "Excess" else "", standby=typ == "Relief", source=typ)  # fmt: skip
+                  excess_seat=key if typ == "Excess" else "", standby=typ == "Relief", source=typ,
+                  unchanged=True)  # fmt: skip
 
 
 def build_seats(data: Data) -> dict[str, Seat]:
@@ -240,7 +242,7 @@ def try_fill(data: Data, swing: Swing, index: int, seat: Seat, costs: Costs) -> 
     end = seat.start + timedelta(hours=data.rules.shift_hours)
     return Option(index, "fill", seat.start, end, activity["Start Depot"], activity["End Depot"], seat.activity_id,
                   seat.demand_id, seat=seat.key, source=typ, offset=offset, cost=cost,
-                  level=seat.level), ""  # fmt: skip
+                  level=seat.level, unchanged=same_seat), ""  # fmt: skip
 
 
 def ride_options(data: Data, swing: Swing, index: int, target_keys: set[str], costs: Costs) -> list[Option]:

@@ -56,6 +56,7 @@ def run_checker(checker, data_dir: Path, data: Data, rows: list[dict]):
 def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, str]]) -> list[tuple]:
     rules = data.rules
     changed_people = {r["Optimised User Id"] for r in roster if r["Optimised User Id"] != r["New User Id"]} - {""}
+    by_id = {r["Assignment ID"]: r for r in roster}
     before_start = [r["Assignment ID"] for r in roster if r["_s"].date() < rules.solver_start
                     and r["Optimised User Id"] != r["New User Id"]]  # fmt: skip
     per_seat = Counter((r["Activity ID"], r["_s"]) for r in roster
@@ -81,9 +82,28 @@ def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, 
 
     # V6: every changed person's work, in order: rest, day/night rest, one shift a day, location, pattern.
     seq: dict[str, list[dict]] = defaultdict(list)
+    residential_start_violations = []
     for r in roster:
-        if r["Optimised User Id"] in changed_people and r["Assignment Type"] in WORK_TYPES:
-            seq[r["Optimised User Id"]].append(r)
+        user = r["Optimised User Id"]
+        if user not in changed_people:
+            continue
+        if r["Assignment Type"] in WORK_TYPES:
+            seq[user].append(r)
+            if (rules.residential_start_restriction
+                    and data.crew[user]["Classification"] == "Residential"
+                    and user != r["New User Id"]
+                    and not rules.residential_start_allowed(r["_s"])):
+                residential_start_violations.append(f"{user} {r['Assignment ID']} starts at {r['_s']:%H:%M}")
+
+    def source_type(row: dict) -> str:
+        note = row.get("Optimisation Note", "")
+        if note.startswith("filled by ") and note.endswith(")") and ", from " in note:
+            source_id = note.rsplit(", from ", 1)[1][:-1]
+            source_row = by_id.get(source_id)
+            if source_row is not None:
+                return source_row["Assignment Type"]
+        return row["Assignment Type"]
+
     bad = []
     for user, rows in seq.items():
         rows.sort(key=lambda r: r["_s"])
@@ -98,6 +118,8 @@ def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, 
             same_block = rules.is_day(a["_s"]) == rules.is_day(b["_s"])
             if not same_block:
                 changes = 0
+                if rules.relief_only_day_night_transition and source_type(a) != "Relief":
+                    bad.append(f"{user} {b['Assignment ID']} day/night change follows {source_type(a)}")
                 if gap < rules.transition_rest:
                     bad.append(f"{user} {b['Assignment ID']} day/night rest {gap}")
             if a["End Location"] != b["Start Location"]:
@@ -118,7 +140,8 @@ def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, 
         ("V2", "No seat has more people than its demand", over),
         ("V3", "Everyone placed on a new seat is certified (matrix), fit, in role and current", unfit),
         ("V5", "Swings that started before the solver start or are on leave lose no rows (F4)", from_frozen),
-        ("V6", "Changed people: rest, day/night rest, one shift a day, location, one start change per block", bad),
+        ("V6", "Changed people: rest, Relief-only day/night transition, one shift a day, location, one start change per block", bad),
+        ("V7", "Changed Residential assignments do not start from 22:00 to 02:00", residential_start_violations),
     ]
 
 
