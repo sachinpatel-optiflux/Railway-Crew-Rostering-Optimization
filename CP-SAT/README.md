@@ -23,8 +23,9 @@ python scripts/run_pipeline.py
 
 Demand filling priorities are configured separately in
 [`config/activity_head_priority.csv`](../config/activity_head_priority.csv). It must contain exactly one
-positive integer priority per activity head in `activity_demand_df.csv`; lower numbers indicate higher
-priority. The loader rejects duplicate, missing, invalid, and non-demand activity-head entries before solving.
+priority per demand activity head. Each priority must have a weight in `PRIORITY_WEIGHTS` in
+`CP-SAT/utils/activity_head_priority.py`; lower numbers indicate higher priority. Missing, duplicate,
+invalid, unweighted, and non-demand activity-head entries are rejected before solving.
 
 ## Output (`CP-SAT/outputs/roster_full/`)
 
@@ -56,13 +57,12 @@ In `roster_full.csv`, `Optimised User Id` starts as `New User Id` and changes on
   switch start at B and those after it at N, so `03 04 04` is allowed but `03 04 03` and `03 05 05`
   are not. Relief standby rows have no fixed start and are left out.
 - **Excess (G5).** An Excess row may only stay on a seat that is fully covered.
-- - **Stage 1** maximises weighted demand fulfilment. The weights are centralized in
-  `CP-SAT/utils/activity_head_priority.py`: priority 1 has weight 14, priority 2 has weight 13, and so
-  on through priority 14 with weight 1. Each assigned in-model demand position contributes its seat's
-  weight, and seat-capacity constraints limit how many positions can be counted. Stage 2 runs only if
-  Stage 1 proves the weighted optimum.
+- **Stage 1** maximises weighted demand fulfilment. `PRIORITY_WEIGHTS` in
+  `CP-SAT/utils/activity_head_priority.py` maps priorities to weights. Each assigned in-model demand
+  position contributes its seat's weight, and seat-capacity constraints limit how many positions count.
 - **Stage 2** fixes the optimal weighted fulfilment value and makes the cheapest change. The costs are `Costs` in
-  `option_generation/options.py`:
+  `option_generation/options.py`. It runs only when Stage 1 is `OPTIMAL`; if Stage 1 is only `FEASIBLE`,
+  cost minimization is skipped:
 
   | Change | Cost |
   |---|---|
@@ -86,19 +86,6 @@ Recovery checks V1–V6 are added on top:
 - every filler is certified, fit, in an allowed role and current;
 - frozen swings lose no rows;
 - every changed person keeps rest, location and the one-change start pattern.
-
-## Existing reference result (seed 2026, 120 s per stage; before priority optimisation)
-
-| Item | Value |
-|---|---|
-| Gaps | 296 (38 locked before 6 Nov, 258 to fill) |
-| Filled | 242 of 258 (93.8%) |
-| Fillers | about 54 Excess, 188 Relief and 38 Demand moves, with 25 + 13 refills further down the chains |
-| Rule check | no unexpected failure |
-
-Most unfilled gaps are on 6–7 Nov. Most crew working those days are partway through a swing that
-started before 6 Nov, so F4 does not allow them to move. Stage 1 usually stops at the time limit 1–2
-places short of its bound. With several workers, two runs can give different rosters of equal quality.
 
 ## Files
 

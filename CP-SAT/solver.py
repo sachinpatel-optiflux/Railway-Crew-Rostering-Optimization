@@ -196,7 +196,8 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
                   f"{s2.wall_time:.1f}s")  # fmt: skip
     else:
         final = s1
-        print("Stage 2 (NOT RUN): weighted coverage was not proven optimal")
+        print("Stage 2 (SKIPPED): Stage 1 was FEASIBLE, not OPTIMAL; "
+              "assignment costs were not minimized")
 
     chosen = {}
     for sw, nodes, dropped in picks:
@@ -207,7 +208,7 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
         chosen[sw.key] = per_row
     return Result(
         status=stage1_status,
-        cost_status=s2.status_name(st2) if s2 is not None else "NOT RUN",
+        cost_status=s2.status_name(st2) if s2 is not None else "SKIPPED (Stage 1 FEASIBLE)",
         places_filled=best,
         bound=best_bound,
         cost=round(s2.objective_value) if s2 is not None and final is s2 else None,

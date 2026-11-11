@@ -9,6 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "CP-SAT"))
 
+import solver as solver_module  # noqa: E402
 from solver import solve  # noqa: E402
 from utils.activity_head_priority import PRIORITY_WEIGHTS, load_activity_head_priorities  # noqa: E402
 from utils.load_options import load_options  # noqa: E402
@@ -81,11 +82,20 @@ def test_activity_head_priorities_reject_duplicate_entries(tmp_path: Path):
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "15", "urgent", ""])
-def test_activity_head_priorities_reject_invalid_values(tmp_path: Path, value: str):
+def test_activity_head_priorities_reject_values_without_configured_weights(tmp_path: Path, value: str):
     demand, priority = write_priority_inputs(tmp_path, "High\n", f"High,{value}\n")
 
-    with pytest.raises(SystemExit, match="must be integers from 1 to 14"):
+    with pytest.raises(SystemExit, match="must be integers with configured weights"):
         load_activity_head_priorities(demand, priority)
+
+
+def test_activity_head_priority_accepts_priority_with_central_weight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    demand, priority = write_priority_inputs(tmp_path, "High\n", "High,21\n")
+    monkeypatch.setitem(PRIORITY_WEIGHTS, 21, 3)
+
+    assert load_activity_head_priorities(demand, priority) == {"High": 21}
 
 
 def test_cp_sat_prefers_higher_priority_head_when_demand_cannot_all_be_filled():
@@ -212,3 +222,96 @@ def test_cp_sat_counts_demand_positions_up_to_seat_capacity(capacity: int, expec
 
     assert result.places_filled == expected_filled
     assert sum(selected is not None for selected in result.chosen[swing.key]) == expected_filled
+
+
+def test_cp_sat_stage_two_preserves_weighted_coverage_and_minimizes_cost():
+    rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"))
+    rules = replace(
+        rules,
+        rest=timedelta(hours=8),
+        transition_rest=timedelta(hours=8),
+        day_from=6 * 60,
+        day_to=18 * 60,
+    )
+    start = datetime(2026, 11, 1, 6)
+    expensive = Option(
+        0, "fill", start, start + timedelta(hours=8), "A", "A", "expensive",
+        seat="shared-seat", cost=20,
+    )
+    cheap = Option(
+        0, "fill", start, start + timedelta(hours=8), "A", "A", "cheap",
+        seat="shared-seat", cost=1,
+    )
+    swing = SimpleNamespace(
+        key="U1|stage-two",
+        user="U1",
+        home="A",
+        classification="FIFO",
+        earliest_start=None,
+        latest_end=None,
+        row_ids=["R1"],
+        droppable=[False],
+        options=[[expensive, cheap]],
+    )
+    seats = {"shared-seat": SimpleNamespace(capacity=1, priority=1)}
+
+    result = solve(rules, seats, [swing], Costs(), 5, 1, 0)
+
+    assert result.status == "OPTIMAL"
+    assert result.cost_status == "OPTIMAL"
+    assert result.places_filled == 1
+    assert result.chosen[swing.key] == [cheap]
+    assert PRIORITY_WEIGHTS[seats["shared-seat"].priority] * result.places_filled == 14
+    assert result.cost == cheap.cost
+
+
+def test_cp_sat_reports_when_stage_two_is_skipped_for_feasible_stage_one(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"))
+    rules = replace(
+        rules,
+        rest=timedelta(hours=8),
+        transition_rest=timedelta(hours=8),
+        day_from=6 * 60,
+        day_to=18 * 60,
+    )
+    start = datetime(2026, 11, 1, 6)
+    option = Option(
+        0, "fill", start, start + timedelta(hours=8), "A", "A", "fill", seat="seat"
+    )
+    swing = SimpleNamespace(
+        key="U1|feasible",
+        user="U1",
+        home="A",
+        classification="FIFO",
+        earliest_start=None,
+        latest_end=None,
+        row_ids=["R1"],
+        droppable=[False],
+        options=[[option]],
+    )
+    seats = {"seat": SimpleNamespace(capacity=1, priority=1)}
+    original_solver = solver_module.cp_model.CpSolver
+
+    class FeasibleStatusSolver:
+        def __init__(self):
+            self.solver = original_solver()
+
+        @property
+        def parameters(self):
+            return self.solver.parameters
+
+        def solve(self, model):
+            self.solver.solve(model)
+            return solver_module.cp_model.FEASIBLE
+
+        def __getattr__(self, name):
+            return getattr(self.solver, name)
+
+    monkeypatch.setattr(solver_module.cp_model, "CpSolver", FeasibleStatusSolver)
+
+    result = solve(rules, seats, [swing], Costs(), 5, 1, 0)
+
+    assert result.cost_status == "SKIPPED (Stage 1 FEASIBLE)"
+    assert "Stage 2 (SKIPPED): Stage 1 was FEASIBLE, not OPTIMAL" in capsys.readouterr().out

@@ -68,7 +68,8 @@ def load_activity_head_priorities(demand_path: Path, priority_path: Path = DEFAU
         priorities[head] = priority
     if invalid:
         raise SystemExit(
-            "error: activity-head priorities must be integers from 1 to 14: " + ", ".join(invalid)
+            "error: activity-head priorities must be integers with configured weights in "
+            f"PRIORITY_WEIGHTS: {', '.join(invalid)}"
         )
 
     missing = sorted(demand_heads - priorities.keys())
