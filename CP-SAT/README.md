@@ -17,9 +17,14 @@ python scripts/run_pipeline.py
 | `--roster-full` | `gap_generation/output/roster_full.csv` | Roster with gaps |
 | `--options-dir` | `option_generation/output` | Layer 1 output |
 | `--output-dir` | `CP-SAT/outputs/roster_full` | Where results go. A rerun overwrites them |
-| `--time-limit` | 120 | Seconds per stage |
+| `--time-limit` | 120 | Seconds per objective stage |
 | `--workers` | 8 | CP-SAT threads |
 | `--config` | `config.yml` | Shared constraint switches; use the same file as option generation |
+
+Demand filling priorities are configured separately in
+[`config/activity_head_priority.csv`](../config/activity_head_priority.csv). It must contain exactly one
+positive integer priority per activity head in `activity_demand_df.csv`; lower numbers indicate higher
+priority. The loader rejects duplicate, missing, invalid, and non-demand activity-head entries before solving.
 
 ## Output (`CP-SAT/outputs/roster_full/`)
 
@@ -51,8 +56,12 @@ In `roster_full.csv`, `Optimised User Id` starts as `New User Id` and changes on
   switch start at B and those after it at N, so `03 04 04` is allowed but `03 04 03` and `03 05 05`
   are not. Relief standby rows have no fixed start and are left out.
 - **Excess (G5).** An Excess row may only stay on a seat that is fully covered.
-- **Stage 1** fills as many places as possible. Activity priority only breaks ties.
-- **Stage 2** holds that coverage and makes the cheapest change. The costs are `Costs` in
+- - **Stage 1** maximises weighted demand fulfilment. The weights are centralized in
+  `CP-SAT/utils/activity_head_priority.py`: priority 1 has weight 14, priority 2 has weight 13, and so
+  on through priority 14 with weight 1. Each assigned in-model demand position contributes its seat's
+  weight, and seat-capacity constraints limit how many positions can be counted. Stage 2 runs only if
+  Stage 1 proves the weighted optimum.
+- **Stage 2** fixes the optimal weighted fulfilment value and makes the cheapest change. The costs are `Costs` in
   `option_generation/options.py`:
 
   | Change | Cost |
@@ -78,7 +87,7 @@ Recovery checks V1–V6 are added on top:
 - frozen swings lose no rows;
 - every changed person keeps rest, location and the one-change start pattern.
 
-## Result (seed 2026, 120 s per stage)
+## Existing reference result (seed 2026, 120 s per stage; before priority optimisation)
 
 | Item | Value |
 |---|---|

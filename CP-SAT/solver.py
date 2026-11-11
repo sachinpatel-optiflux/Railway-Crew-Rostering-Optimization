@@ -13,8 +13,9 @@ base start B and a changed start N, at most `Max Start Change Minutes` apart, an
 worked shift before the switch starts at B, every one after it at N. So the start changes at most once.
 Relief standby rows have no fixed start and are not part of the pattern.
 
-Stage 1 fills as many seats as possible (ties broken by activity priority). Stage 2 holds that and makes
-the cheapest change to the roster (costs from option_generation.options.Costs).
+Stage 1 maximises weighted demand coverage using the centrally configured activity-head priority
+weights. Stage 2 fixes the optimal weighted coverage and makes the cheapest change to the roster
+(costs from option_generation.options.Costs).
 """
 
 from __future__ import annotations
@@ -24,12 +25,10 @@ from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
 from utils.load_options import ModelSwing, SeatInfo
+from utils.activity_head_priority import PRIORITY_WEIGHTS
 
 from option_generation.options import Costs, Option
 from option_generation.rules import Rules
-
-SEAT_VALUE = 10_000  # one seat always beats any priority tie-break
-LOWEST_PRIORITY = 15
 
 
 @dataclass
@@ -141,13 +140,10 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
                 model.add(new == m).only_enforce_if([lit, after[o.row_index]])
         picks.append((sw, nodes, dropped))
 
-    # Seat room, and coverage weighted by priority (1 = highest).
-    coverage_terms = []
+    # Seat capacity bounds the number of demand positions credited to the objective.
     for key, lits in at_seat.items():
         seat = seats[key]
         model.add(sum(lits) <= seat.capacity)
-        weight = SEAT_VALUE + LOWEST_PRIORITY - min(seat.priority, LOWEST_PRIORITY)
-        coverage_terms += [(weight, lit) for lit in lits]
     # G5: an Excess row (or a trip as Excess) may only sit on a seat that is fully covered.
     for key, lit in excess_on:
         seat = seats.get(key)
@@ -164,27 +160,43 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
         return solver, solver.solve(model)
 
     print(f"Model: {len(picks)} swings, {len(tracked)} variables, {len(at_seat)} seats")
-    coverage = sum(w * t for w, t in coverage_terms)
-    model.maximize(coverage)
+    coverage = [lit for lits in at_seat.values() for lit in lits]
+    weighted_coverage = sum(
+        PRIORITY_WEIGHTS[seats[key].priority] * sum(lits)
+        for key, lits in at_seat.items()
+    )
+    model.maximize(weighted_coverage)
     s1, st1 = run(time_limit)
     if st1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return Result(s1.status_name(st1), "NOT RUN", 0, 0, None, None, s1.wall_time)
-    best = round(s1.objective_value)
-    print(f"Stage 1 ({s1.status_name(st1)}): {best // SEAT_VALUE} places, {s1.wall_time:.1f}s")
 
-    model.clear_objective()
-    model.clear_hints()
-    for var in tracked:
-        model.add_hint(var, s1.value(var))
-    model.add(coverage >= best)
-    model.minimize(sum(c * v for c, v in spend))
-    s2, st2 = run(time_limit)
-    final = s2 if st2 in (cp_model.OPTIMAL, cp_model.FEASIBLE) else s1
-    if final is s2:
-        print(f"Stage 2 ({s2.status_name(st2)}): cost {s2.objective_value:.0f} "
-              f"(bound {s2.best_objective_bound:.0f}), {s2.wall_time:.1f}s")  # fmt: skip
+    best = sum(s1.value(lit) for lit in coverage)
+    best_weighted_coverage = round(s1.objective_value)
+    best_bound = sum(seat.capacity for seat in seats.values())
+    stage1_status = s1.status_name(st1)
+    print(f"Stage 1 ({stage1_status}): {best} places, weighted coverage "
+          f"{best_weighted_coverage} (bound {s1.best_objective_bound:.0f}), {s1.wall_time:.1f}s")
+
+    s2 = None
+    st2 = None
+    if st1 == cp_model.OPTIMAL:
+        model.clear_objective()
+        model.clear_hints()
+        for var in tracked:
+            model.add_hint(var, s1.value(var))
+        model.add(weighted_coverage == best_weighted_coverage)
+        model.minimize(sum(c * v for c, v in spend))
+        s2, st2 = run(time_limit)
+        final = s2 if st2 in (cp_model.OPTIMAL, cp_model.FEASIBLE) else s1
+        if final is s2:
+            print(f"Stage 2 ({s2.status_name(st2)}): cost {s2.objective_value:.0f} "
+                  f"(bound {s2.best_objective_bound:.0f}), {s2.wall_time:.1f}s")  # fmt: skip
+        else:
+            print(f"Stage 2 ({s2.status_name(st2)}): no better roster found, keeping stage 1, "
+                  f"{s2.wall_time:.1f}s")  # fmt: skip
     else:
-        print(f"Stage 2 ({s2.status_name(st2)}): no better roster found, keeping stage 1, {s2.wall_time:.1f}s")
+        final = s1
+        print("Stage 2 (NOT RUN): weighted coverage was not proven optimal")
 
     chosen = {}
     for sw, nodes, dropped in picks:
@@ -194,12 +206,12 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
                 per_row[o.row_index] = o
         chosen[sw.key] = per_row
     return Result(
-        status=s1.status_name(st1),
-        cost_status=s2.status_name(st2),
-        places_filled=best // SEAT_VALUE,
-        bound=s1.best_objective_bound / SEAT_VALUE,
-        cost=round(s2.objective_value) if final is s2 else None,
-        cost_bound=s2.best_objective_bound if final is s2 else None,
-        seconds=s1.wall_time + s2.wall_time,
+        status=stage1_status,
+        cost_status=s2.status_name(st2) if s2 is not None else "NOT RUN",
+        places_filled=best,
+        bound=best_bound,
+        cost=round(s2.objective_value) if s2 is not None and final is s2 else None,
+        cost_bound=s2.best_objective_bound if s2 is not None and final is s2 else None,
+        seconds=s1.wall_time + (s2.wall_time if s2 is not None else 0),
         chosen=chosen,
     )

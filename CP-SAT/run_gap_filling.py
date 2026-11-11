@@ -18,6 +18,10 @@ sys.path.insert(0, str(HERE.parent))  # option_generation
 sys.path.insert(0, str(HERE))  # solver, utils
 
 from solver import solve  # noqa: E402
+from utils.activity_head_priority import (  # noqa: E402
+    DEFAULT_ACTIVITY_HEAD_PRIORITY,
+    load_activity_head_priorities,
+)
 from utils.load_options import load_options  # noqa: E402
 from utils.output import apply, write_outputs, write_summary  # noqa: E402
 from utils.validate import validate  # noqa: E402
@@ -40,7 +44,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="YAML constraint switches (default: config.yml)")
     p.add_argument("--options-dir", type=Path, default=DEFAULT_OPTIONS, help="output of option_generation")
     p.add_argument("--output-dir", type=Path, default=HERE / "outputs" / "roster_full")
-    p.add_argument("--time-limit", type=float, default=120, help="seconds per stage (default 120)")
+    p.add_argument("--time-limit", type=float, default=120,
+                   help="seconds per objective stage (default 120)")  # fmt: skip
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--seed", type=int, default=2026)
     p.add_argument("--log", action="store_true", help="print the CP-SAT search log")
@@ -49,7 +54,10 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     data = load(args.data_dir, args.roster_full, args.config)
-    seats, swings = load_options(args.options_dir)
+    activity_head_priorities = load_activity_head_priorities(
+        args.data_dir / "activity_demand_df.csv", DEFAULT_ACTIVITY_HEAD_PRIORITY
+    )
+    seats, swings = load_options(args.options_dir, activity_head_priorities)
     frozen = {(s["User Id"], s["Swing"]) for s in read_csv(args.options_dir / "swings.csv") if s["Status"] == "frozen"}
     print(f"Seats {len(seats)}, swings in the model {len(swings)}, "
           f"options {sum(len(o) for sw in swings for o in sw.options)}")  # fmt: skip
