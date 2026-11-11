@@ -27,6 +27,18 @@ priority per demand activity head. Each priority must have a weight in `PRIORITY
 `CP-SAT/utils/activity_head_priority.py`; lower numbers indicate higher priority. Missing, duplicate,
 invalid, unweighted, and non-demand activity-head entries are rejected before solving.
 
+`config.yml` selects how those priorities affect optimization:
+
+```yaml
+optimization:
+  priority_strategy: none  # none / weighted / lexicographic
+```
+
+Every strategy first maximizes total demand fulfilment. `none` then minimizes assignment cost;
+`weighted` next maximizes weighted activity-head fulfilment; `lexicographic` instead maximizes
+fulfilment for each priority in ascending order, one stage at a time. Each stage's optimum is fixed
+before the next stage runs, and the next stage is skipped unless the previous stage is proven `OPTIMAL`.
+
 ## Output (`CP-SAT/outputs/roster_full/`)
 
 | File | Content |
@@ -57,12 +69,11 @@ In `roster_full.csv`, `Optimised User Id` starts as `New User Id` and changes on
   switch start at B and those after it at N, so `03 04 04` is allowed but `03 04 03` and `03 05 05`
   are not. Relief standby rows have no fixed start and are left out.
 - **Excess (G5).** An Excess row may only stay on a seat that is fully covered.
-- **Stage 1** maximises weighted demand fulfilment. `PRIORITY_WEIGHTS` in
-  `CP-SAT/utils/activity_head_priority.py` maps priorities to weights. Each assigned in-model demand
+- **Objective stages** follow `optimization.priority_strategy` as described above. Weighted fulfilment
+  uses `PRIORITY_WEIGHTS` in `CP-SAT/utils/activity_head_priority.py`. Each assigned in-model demand
   position contributes its seat's weight, and seat-capacity constraints limit how many positions count.
-- **Stage 2** fixes the optimal weighted fulfilment value and makes the cheapest change. The costs are `Costs` in
-  `option_generation/options.py`. It runs only when Stage 1 is `OPTIMAL`; if Stage 1 is only `FEASIBLE`,
-  cost minimization is skipped:
+  The final cost stage uses `Costs` in `option_generation/options.py`. A later stage only runs when the
+  preceding stage is `OPTIMAL`; if a stage is only `FEASIBLE`, all remaining stages are skipped.
 
   | Change | Cost |
   |---|---|
@@ -92,7 +103,7 @@ Recovery checks V1–V6 are added on top:
 | File | Purpose |
 |---|---|
 | `run_gap_filling.py` | Command line entry point |
-| `solver.py` | The CP-SAT model and the two stages |
+| `solver.py` | The CP-SAT model and staged objectives |
 | `utils/load_options.py` | Reads the layer 1 files |
 | `utils/output.py` | Writes `Optimised User Id`, the reports and the summary |
 | `utils/validate.py` | The checker comparison and checks V1–V6 |

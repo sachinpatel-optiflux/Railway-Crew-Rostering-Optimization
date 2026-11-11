@@ -131,13 +131,17 @@ def write_summary(path, data: Data, seats, solved, result: dict, validation: dic
         f"| Solver start (rows before it never change) | {data.rules.solver_start} |",
         f"| Residential start restriction | {'on' if data.rules.residential_start_restriction else 'off'} |",
         f"| Relief-only day/night transition | {'on' if data.rules.relief_only_day_night_transition else 'off'} |",
+        f"| Priority strategy | {data.rules.priority_strategy} |",
         f"| Gaps (Demand rows on leave) | {len(gaps)} |",
         f"| Locked gaps (before the solver start) | {len(locked)} |",
         f"| Gaps to fill | {len(to_fill)} |",
         f"| Gaps filled | **{len(filled_gaps)}** ({100 * len(filled_gaps) / max(len(to_fill), 1):.1f}%) |",
         f"| Seats left open by a Demand move | {len(opened)} |",
-        f"| Stage 1, coverage | {solved.status} (upper bound {solved.bound:.0f} places, found {solved.places_filled}) |",
-        f"| Stage 2, cost of changes | {solved.cost_status} (cost {solved.cost}, lower bound {solved.cost_bound}) |",
+        *[
+            f"| Objective stage: {name.replace('_', ' ')} | {status} |"
+            for name, status in solved.stage_statuses.items()
+        ],
+        f"| Assignment cost | {solved.cost} (lower bound {solved.cost_bound}) |",
         f"| Seats filled by Excess / Relief / Demand | {source['Excess']} / {source['Relief']} / {source['Demand']} |",
         f"| Fills by chain level (0 = gap seat) | {', '.join(f'{k}: {v}' for k, v in sorted(chains.items()))} |",
         f"| People moved | {len(moved)} |",

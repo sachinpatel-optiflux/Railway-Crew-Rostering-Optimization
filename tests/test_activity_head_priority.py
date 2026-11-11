@@ -132,13 +132,18 @@ def test_cp_sat_prefers_higher_priority_head_when_demand_cannot_all_be_filled():
         "low-seat": SimpleNamespace(capacity=1, priority=2),
     }
 
-    result = solve(rules, seats, [swing], Costs(), 5, 1, 0)
+    result = solve(rules, seats, [swing], Costs(), 5, 1, 0, priority_strategy="weighted")
 
     assert result.chosen[swing.key][0] == high
     assert result.places_filled == 1
+    assert result.stage_statuses == {
+        "coverage": "OPTIMAL",
+        "weighted_priority": "OPTIMAL",
+        "cost": "OPTIMAL",
+    }
 
 
-def test_cp_sat_uses_weight_sum_not_lexicographic_priority():
+def test_priority_strategy_weighted_and_lexicographic_after_total_coverage():
     rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"))
     rules = replace(
         rules,
@@ -146,24 +151,23 @@ def test_cp_sat_uses_weight_sum_not_lexicographic_priority():
         transition_rest=timedelta(0),
         day_from=6 * 60,
         day_to=18 * 60,
-        max_change_minutes=600,
+        relief_only_day_night_transition=False,
     )
     first_day = datetime(2026, 11, 1, 6)
-    second_day = datetime(2026, 11, 2, 10)
-    high = Option(
-        0, "fill", first_day, second_day + timedelta(hours=2), "A", "A", "high",
-        seat="high-seat",
+    second_day = datetime(2026, 11, 2, 6)
+    high = Option(0, "fill", first_day, second_day + timedelta(hours=8), "A", "A", "high", seat="high-seat")
+    medium_first = Option(
+        0, "fill", first_day, first_day + timedelta(hours=8), "A", "A", "medium-first",
+        seat="medium-first-seat",
     )
-    low_first = Option(
-        0, "fill", first_day, first_day + timedelta(hours=2), "A", "A", "low-first",
-        seat="low-first-seat",
-    )
-    low_second = Option(
-        1, "fill", second_day, second_day + timedelta(hours=2), "A", "A", "low-second",
-        seat="low-second-seat",
+    low_start = second_day + timedelta(hours=12)
+    low = Option(1, "fill", low_start, low_start + timedelta(hours=8), "A", "A", "low", seat="low-seat")
+    medium_second = Option(
+        1, "fill", second_day, second_day + timedelta(hours=8), "A", "A", "medium-second",
+        seat="medium-second-seat",
     )
     swing = SimpleNamespace(
-        key="U1|weighted-priority",
+        key="U1|priority-strategy",
         user="U1",
         home="A",
         classification="FIFO",
@@ -171,18 +175,51 @@ def test_cp_sat_uses_weight_sum_not_lexicographic_priority():
         latest_end=None,
         row_ids=["R1", "R2"],
         droppable=[False, True],
-        options=[[high, low_first], [low_second]],
+        options=[[high, medium_first], [low, medium_second]],
     )
     seats = {
         "high-seat": SimpleNamespace(capacity=1, priority=1),
-        "low-first-seat": SimpleNamespace(capacity=1, priority=2),
-        "low-second-seat": SimpleNamespace(capacity=1, priority=2),
+        "medium-first-seat": SimpleNamespace(capacity=1, priority=2),
+        "medium-second-seat": SimpleNamespace(capacity=1, priority=2),
+        "low-seat": SimpleNamespace(capacity=1, priority=14),
     }
 
-    result = solve(rules, seats, [swing], Costs(), 5, 1, 0)
+    weighted = solve(rules, seats, [swing], Costs(), 5, 1, 0, priority_strategy="weighted")
+    lexicographic = solve(rules, seats, [swing], Costs(), 5, 1, 0, priority_strategy="lexicographic")
 
-    assert result.chosen[swing.key] == [low_first, low_second]
-    assert result.places_filled == 2
+    assert weighted.places_filled == lexicographic.places_filled == 2
+    assert weighted.chosen[swing.key] == [medium_first, medium_second]
+    assert lexicographic.chosen[swing.key] == [high, low]
+    assert list(lexicographic.stage_statuses) == ["coverage", "priority_1", "priority_2", "priority_14", "cost"]
+
+
+def test_none_strategy_uses_cost_without_prioritizing_activity_heads():
+    rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"))
+    rules = replace(rules, rest=timedelta(hours=8), transition_rest=timedelta(hours=8))
+    start = datetime(2026, 11, 1, 6)
+    high = Option(0, "fill", start, start + timedelta(hours=8), "A", "A", "high", seat="high", cost=20)
+    low = Option(0, "fill", start, start + timedelta(hours=8), "A", "A", "low", seat="low", cost=1)
+    swing = SimpleNamespace(
+        key="U1|none",
+        user="U1",
+        home="A",
+        classification="FIFO",
+        earliest_start=None,
+        latest_end=None,
+        row_ids=["R1"],
+        droppable=[False],
+        options=[[high, low]],
+    )
+    seats = {
+        "high": SimpleNamespace(capacity=1, priority=1),
+        "low": SimpleNamespace(capacity=1, priority=14),
+    }
+
+    result = solve(rules, seats, [swing], Costs(), 5, 1, 0, priority_strategy="none")
+
+    assert result.places_filled == 1
+    assert result.chosen[swing.key] == [low]
+    assert list(result.stage_statuses) == ["coverage", "cost"]
 
 
 @pytest.mark.parametrize(("capacity", "expected_filled"), [(1, 1), (2, 2)])
@@ -255,7 +292,7 @@ def test_cp_sat_stage_two_preserves_weighted_coverage_and_minimizes_cost():
     )
     seats = {"shared-seat": SimpleNamespace(capacity=1, priority=1)}
 
-    result = solve(rules, seats, [swing], Costs(), 5, 1, 0)
+    result = solve(rules, seats, [swing], Costs(), 5, 1, 0, priority_strategy="weighted")
 
     assert result.status == "OPTIMAL"
     assert result.cost_status == "OPTIMAL"
@@ -263,6 +300,7 @@ def test_cp_sat_stage_two_preserves_weighted_coverage_and_minimizes_cost():
     assert result.chosen[swing.key] == [cheap]
     assert PRIORITY_WEIGHTS[seats["shared-seat"].priority] * result.places_filled == 14
     assert result.cost == cheap.cost
+    assert list(result.stage_statuses) == ["coverage", "weighted_priority", "cost"]
 
 
 def test_cp_sat_reports_when_stage_two_is_skipped_for_feasible_stage_one(
@@ -314,4 +352,8 @@ def test_cp_sat_reports_when_stage_two_is_skipped_for_feasible_stage_one(
     result = solve(rules, seats, [swing], Costs(), 5, 1, 0)
 
     assert result.cost_status == "SKIPPED (Stage 1 FEASIBLE)"
+    assert result.stage_statuses == {
+        "coverage": "FEASIBLE",
+        "cost": "SKIPPED (Stage 1 FEASIBLE)",
+    }
     assert "Stage 2 (SKIPPED): Stage 1 was FEASIBLE, not OPTIMAL" in capsys.readouterr().out

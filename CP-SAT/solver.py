@@ -24,8 +24,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
-from utils.load_options import ModelSwing, SeatInfo
 from utils.activity_head_priority import PRIORITY_WEIGHTS
+from utils.load_options import ModelSwing, SeatInfo
 
 from option_generation.options import Costs, Option
 from option_generation.rules import Rules
@@ -41,6 +41,7 @@ class Result:
     cost_bound: float | None
     seconds: float
     chosen: dict[str, list[Option | None]] = field(default_factory=dict)  # swing key -> option per row (None = dropped)
+    stage_statuses: dict[str, str] = field(default_factory=dict)
 
 
 def _can_open(rules: Rules, sw: ModelSwing, o: Option) -> bool:
@@ -58,9 +59,12 @@ def _skippable(sw: ModelSwing, first: int, last: int) -> bool:
 
 
 def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], costs: Costs, time_limit: float,
-          workers: int, seed: int, log: bool = False) -> Result:  # fmt: skip
+          workers: int, seed: int, log: bool = False, priority_strategy: str | None = None) -> Result:  # fmt: skip
     if rules.max_changes not in (0, 1):
         raise SystemExit("error: the model supports Max Start Changes Per Block of 0 or 1")
+    priority_strategy = rules.priority_strategy if priority_strategy is None else priority_strategy
+    if not isinstance(priority_strategy, str) or priority_strategy not in ("none", "weighted", "lexicographic"):
+        raise ValueError("priority_strategy must be one of: none, weighted, lexicographic")
     model = cp_model.CpModel()
     tracked: list = []
     picks: list[tuple[ModelSwing, list[tuple[Option, object]], list[object | None]]] = []
@@ -165,54 +169,94 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
         PRIORITY_WEIGHTS[seats[key].priority] * sum(lits)
         for key, lits in at_seat.items()
     )
-    model.maximize(weighted_coverage)
-    s1, st1 = run(time_limit)
-    if st1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return Result(s1.status_name(st1), "NOT RUN", 0, 0, None, None, s1.wall_time)
+    stages: list[tuple[str, object, bool, str]] = [
+        ("coverage", sum(coverage), True, "total demand fulfilment"),
+    ]
+    if priority_strategy == "weighted":
+        stages.append(("weighted_priority", weighted_coverage, True, "weighted activity-head priority"))
+    elif priority_strategy == "lexicographic":
+        for priority in sorted({seat.priority for seat in seats.values()}):
+            objective = sum(
+                lit
+                for key, lits_for_seat in at_seat.items()
+                if seats[key].priority == priority
+                for lit in lits_for_seat
+            )
+            stages.append((f"priority_{priority}", objective, True, f"priority {priority} demand fulfilment"))
+    stages.append(("cost", sum(c * v for c, v in spend), False, "assignment cost"))
 
-    best = sum(s1.value(lit) for lit in coverage)
-    best_weighted_coverage = round(s1.objective_value)
-    best_bound = sum(seat.capacity for seat in seats.values())
-    stage1_status = s1.status_name(st1)
-    print(f"Stage 1 ({stage1_status}): {best} places, weighted coverage "
-          f"{best_weighted_coverage} (bound {s1.best_objective_bound:.0f}), {s1.wall_time:.1f}s")
+    stage_statuses = {}
+    stage_solvers = {}
+    total_seconds = 0.0
+    final = None
+    blocked_stage = None
+    for index, (name, objective, maximize, description) in enumerate(stages, start=1):
+        if blocked_stage is not None:
+            blocked_name, blocked_status, blocked_index = blocked_stage
+            status = f"SKIPPED (Stage {blocked_index} {blocked_status})"
+            stage_statuses[name] = status
+            print(f"Stage {index} (SKIPPED): Stage {blocked_index} was {blocked_status}, not OPTIMAL; "
+                  f"{description} was not optimized")
+            continue
 
-    s2 = None
-    st2 = None
-    if st1 == cp_model.OPTIMAL:
         model.clear_objective()
-        model.clear_hints()
-        for var in tracked:
-            model.add_hint(var, s1.value(var))
-        model.add(weighted_coverage == best_weighted_coverage)
-        model.minimize(sum(c * v for c, v in spend))
-        s2, st2 = run(time_limit)
-        final = s2 if st2 in (cp_model.OPTIMAL, cp_model.FEASIBLE) else s1
-        if final is s2:
-            print(f"Stage 2 ({s2.status_name(st2)}): cost {s2.objective_value:.0f} "
-                  f"(bound {s2.best_objective_bound:.0f}), {s2.wall_time:.1f}s")  # fmt: skip
+        model.maximize(objective) if maximize else model.minimize(objective)
+        solver, code = run(time_limit)
+        total_seconds += solver.wall_time
+        status = solver.status_name(code)
+        stage_statuses[name] = status
+        print(f"Stage {index} ({status}): {description}", end="")
+        if code in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            value = solver.value(objective)
+            print(f" {value} (bound {solver.best_objective_bound:.0f}), {solver.wall_time:.1f}s")
+            final = solver
+            stage_solvers[name] = solver
+            if code == cp_model.OPTIMAL and index < len(stages):
+                model.add(objective == value)
+                model.clear_hints()
+                for var in tracked:
+                    model.add_hint(var, solver.value(var))
+            elif code != cp_model.OPTIMAL:
+                blocked_stage = (name, status, index)
         else:
-            print(f"Stage 2 ({s2.status_name(st2)}): no better roster found, keeping stage 1, "
-                  f"{s2.wall_time:.1f}s")  # fmt: skip
-    else:
-        final = s1
-        print("Stage 2 (SKIPPED): Stage 1 was FEASIBLE, not OPTIMAL; "
-              "assignment costs were not minimized")
+            print(f", {solver.wall_time:.1f}s")
+            blocked_stage = (name, status, index)
+
+    first_solver = stage_solvers.get("coverage")
+    if first_solver is None:
+        first_status = stage_statuses["coverage"]
+        return Result(
+            status=first_status,
+            cost_status=stage_statuses.get("cost", "NOT RUN"),
+            places_filled=0,
+            bound=0,
+            cost=None,
+            cost_bound=None,
+            seconds=total_seconds,
+            stage_statuses=stage_statuses,
+        )
+
+    best = sum(first_solver.value(lit) for lit in coverage)
+    best_bound = sum(seat.capacity for seat in seats.values())
+    cost_solver = stage_solvers.get("cost")
+    cost_value = round(cost_solver.objective_value) if cost_solver else None
+    cost_bound = cost_solver.best_objective_bound if cost_solver else None
 
     chosen = {}
-    for sw, nodes, dropped in picks:
+    for sw, nodes, _dropped in picks:
         per_row: list[Option | None] = [None] * len(sw.options)
         for o, lit in nodes:
             if final.value(lit):
                 per_row[o.row_index] = o
         chosen[sw.key] = per_row
     return Result(
-        status=stage1_status,
-        cost_status=s2.status_name(st2) if s2 is not None else "SKIPPED (Stage 1 FEASIBLE)",
+        status=stage_statuses["coverage"],
+        cost_status=stage_statuses["cost"],
         places_filled=best,
         bound=best_bound,
-        cost=round(s2.objective_value) if s2 is not None and final is s2 else None,
-        cost_bound=s2.best_objective_bound if s2 is not None and final is s2 else None,
-        seconds=s1.wall_time + (s2.wall_time if s2 is not None else 0),
+        cost=cost_value,
+        cost_bound=cost_bound,
         chosen=chosen,
+        seconds=total_seconds,
+        stage_statuses=stage_statuses,
     )
