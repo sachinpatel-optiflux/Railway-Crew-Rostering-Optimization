@@ -42,6 +42,8 @@ class Result:
     seconds: float
     chosen: dict[str, list[Option | None]] = field(default_factory=dict)  # swing key -> option per row (None = dropped)
     stage_statuses: dict[str, str] = field(default_factory=dict)
+    stage_values: dict[str, int] = field(default_factory=dict)  # objective value of each stage that ran
+    stage_bounds: dict[str, float] = field(default_factory=dict)  # CP-SAT best objective bound of each stage
 
 
 def _can_open(rules: Rules, sw: ModelSwing, o: Option) -> bool:
@@ -186,6 +188,8 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
     stages.append(("cost", sum(c * v for c, v in spend), False, "assignment cost"))
 
     stage_statuses = {}
+    stage_values = {}
+    stage_bounds = {}
     stage_solvers = {}
     total_seconds = 0.0
     final = None
@@ -209,6 +213,8 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
         if code in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             value = solver.value(objective)
             print(f" {value} (bound {solver.best_objective_bound:.0f}), {solver.wall_time:.1f}s")
+            stage_values[name] = value
+            stage_bounds[name] = solver.best_objective_bound
             final = solver
             stage_solvers[name] = solver
             if code == cp_model.OPTIMAL and index < len(stages):
@@ -234,10 +240,12 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
             cost_bound=None,
             seconds=total_seconds,
             stage_statuses=stage_statuses,
+            stage_values=stage_values,
+            stage_bounds=stage_bounds,
         )
 
     best = sum(first_solver.value(lit) for lit in coverage)
-    best_bound = sum(seat.capacity for seat in seats.values())
+    best_bound = first_solver.best_objective_bound
     cost_solver = stage_solvers.get("cost")
     cost_value = round(cost_solver.objective_value) if cost_solver else None
     cost_bound = cost_solver.best_objective_bound if cost_solver else None
@@ -259,4 +267,6 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
         chosen=chosen,
         seconds=total_seconds,
         stage_statuses=stage_statuses,
+        stage_values=stage_values,
+        stage_bounds=stage_bounds,
     )

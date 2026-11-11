@@ -74,6 +74,20 @@ def test_activity_head_priorities_reject_missing_demand_head(tmp_path: Path):
         load_activity_head_priorities(demand, priority)
 
 
+def test_activity_head_priorities_reject_non_demand_head(tmp_path: Path):
+    demand, priority = write_priority_inputs(tmp_path, "High\n", "High,1\nExtra,2\n")
+
+    with pytest.raises(SystemExit, match="priorities configured for non-demand activity heads: Extra"):
+        load_activity_head_priorities(demand, priority)
+
+
+def test_activity_head_priorities_reject_empty_demand_head(tmp_path: Path):
+    demand, priority = write_priority_inputs(tmp_path, "High\n \n", "High,1\n")
+
+    with pytest.raises(SystemExit, match="contains a demand row with an empty Activity Head"):
+        load_activity_head_priorities(demand, priority)
+
+
 def test_activity_head_priorities_reject_duplicate_entries(tmp_path: Path):
     demand, priority = write_priority_inputs(tmp_path, "High\n", "High,1\nHigh,2\n")
 
@@ -357,3 +371,90 @@ def test_cp_sat_reports_when_stage_two_is_skipped_for_feasible_stage_one(
         "cost": "SKIPPED (Stage 1 FEASIBLE)",
     }
     assert "Stage 2 (SKIPPED): Stage 1 was FEASIBLE, not OPTIMAL" in capsys.readouterr().out
+
+
+def test_cp_sat_skips_later_stages_when_intermediate_priority_stage_is_feasible(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"))
+    rules = replace(
+        rules,
+        rest=timedelta(hours=8),
+        transition_rest=timedelta(hours=8),
+        day_from=6 * 60,
+        day_to=18 * 60,
+    )
+    start = datetime(2026, 11, 1, 6)
+    high = Option(0, "fill", start, start + timedelta(hours=8), "A", "A", "high", seat="high", cost=20)
+    low = Option(0, "fill", start, start + timedelta(hours=8), "A", "A", "low", seat="low", cost=1)
+    swing = SimpleNamespace(
+        key="U1|lex-feasible",
+        user="U1",
+        home="A",
+        classification="FIFO",
+        earliest_start=None,
+        latest_end=None,
+        row_ids=["R1"],
+        droppable=[False],
+        options=[[high, low]],
+    )
+    seats = {
+        "high": SimpleNamespace(capacity=2, priority=1),
+        "low": SimpleNamespace(capacity=2, priority=2),
+    }
+    original_solver = solver_module.cp_model.CpSolver
+    calls = 0
+
+    class SecondStageFeasibleSolver:
+        def __init__(self):
+            self.solver = original_solver()
+
+        @property
+        def parameters(self):
+            return self.solver.parameters
+
+        def solve(self, model):
+            nonlocal calls
+            calls += 1
+            code = self.solver.solve(model)
+            return solver_module.cp_model.FEASIBLE if calls == 2 else code
+
+        def __getattr__(self, name):
+            return getattr(self.solver, name)
+
+    monkeypatch.setattr(solver_module.cp_model, "CpSolver", SecondStageFeasibleSolver)
+
+    result = solve(rules, seats, [swing], Costs(), 5, 1, 0, priority_strategy="lexicographic")
+
+    assert result.places_filled == 1
+    assert result.bound == 1.0  # solver optimization bound (1.0), not total seat capacity (4)
+    assert result.cost is None
+    assert result.stage_statuses == {
+        "coverage": "OPTIMAL",
+        "priority_1": "FEASIBLE",
+        "priority_2": "SKIPPED (Stage 2 FEASIBLE)",
+        "cost": "SKIPPED (Stage 2 FEASIBLE)",
+    }
+    assert set(result.stage_values) == {"coverage", "priority_1"}  # skipped stages report no value
+
+
+def test_lexicographic_priority_level_without_in_model_seats_is_solved_as_zero():
+    rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"))
+    rules = replace(rules, rest=timedelta(hours=8), transition_rest=timedelta(hours=8))
+    start = datetime(2026, 11, 1, 6)
+    option = Option(0, "fill", start, start + timedelta(hours=8), "A", "A", "used", seat="used", cost=3)
+    swing = SimpleNamespace(
+        key="U1|empty-level", user="U1", home="A", classification="FIFO", earliest_start=None,
+        latest_end=None, row_ids=["R1"], droppable=[False], options=[[option]],
+    )
+    seats = {
+        "used": SimpleNamespace(capacity=1, priority=2),
+        "unused": SimpleNamespace(capacity=1, priority=1),  # no option points at this seat
+    }
+
+    result = solve(rules, seats, [swing], Costs(), 5, 1, 0, priority_strategy="lexicographic")
+
+    assert result.stage_statuses == {
+        "coverage": "OPTIMAL", "priority_1": "OPTIMAL", "priority_2": "OPTIMAL", "cost": "OPTIMAL",
+    }
+    assert result.stage_values == {"coverage": 1, "priority_1": 0, "priority_2": 1, "cost": 3}
