@@ -9,10 +9,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "CP-SAT"))
 
-from utils.validate import recovery_checks
+from utils.validate import recovery_checks  # noqa: E402
 
-from option_generation.data import DEFAULT_DATA_DIR, read_csv
-from option_generation.rules import DEFAULT_CONFIG, Rules
+from option_generation.data import DEFAULT_DATA_DIR, read_csv  # noqa: E402
+from option_generation.rules import DEFAULT_CONFIG, Rules  # noqa: E402
 
 
 def make_rules(**overrides):
