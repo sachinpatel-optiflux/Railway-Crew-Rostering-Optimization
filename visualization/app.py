@@ -34,6 +34,7 @@ from visualization.data_loader import (  # noqa: E402
 from visualization.gap_analysis import (  # noqa: E402
     build_constraint_diagnostics,
     build_unfilled_gap_records,
+    check_swing_home_depot,
     inspect_seat_candidates,
     parse_summary_and_validation,
     summarize_gaps,
@@ -185,11 +186,17 @@ def main() -> None:
             help=f"Demand shifts: {kpis.fifo_demand_assignments:,} | All work shifts (incl. Excess/Relief): {kpis.fifo_work_assignments:,}",
         )
 
-        g1, g2, g3, g4 = st.columns(4)
+        g1, g2, g3, g4, g5 = st.columns(5)
+        depot_chk = check_swing_home_depot(dataset)
         g1.metric("Total Leave Gaps", f"{kpis.total_gaps:,}")
         g2.metric("Open Gaps (On/After Solver Start)", f"{kpis.open_gaps_to_fill:,}")
         g3.metric("Open Gaps Filled by CP-SAT", f"{kpis.gaps_filled:,} ({kpis.gap_fill_pct:.1f}%)")
         g4.metric("Locked Gaps (Before Solver Start)", f"{kpis.locked_gaps:,}")
+        g5.metric(
+            "Swings Starting & Ending at Home Depot",
+            f"{depot_chk['passed_swings']:,} / {depot_chk['total_swings']:,} ({depot_chk['pass_pct']:.1f}%)",
+            f"{depot_chk['solver_modified_failed_swings']} solver-modified failures",
+        )
 
         # Improvement 5: Solver Objective Stage & Validation Status Banner
         if parsed_meta["stages"] or parsed_meta["validation_headline"]:
@@ -426,12 +433,47 @@ def main() -> None:
         )
 
         diag = build_constraint_diagnostics(dataset)
+        depot_chk = diag["home_depot_check"]
 
-        st.markdown("#### 1. Active Constraint Switches & Rule Parameters")
-        st.dataframe(diag["constraint_overview"], use_container_width=True, hide_index=True)
+        st.markdown("#### 1. Home Depot Swing Start & End Check (Every Crew Swing)")
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("Total Crew Swings Checked", f"{depot_chk['total_swings']:,}")
+        d2.metric(
+            "Swings Starting & Ending at Home Depot",
+            f"{depot_chk['passed_swings']:,} ({depot_chk['pass_pct']:.2f}%)",
+        )
+        d3.metric(
+            "Failed Swings (Start or End != Home Depot)",
+            f"{depot_chk['failed_swings']:,}",
+            help=f"Start mismatch: {depot_chk['failed_start_count']} | End mismatch: {depot_chk['failed_end_count']}",
+        )
+        d4.metric(
+            "Solver-Modified Failed Swings",
+            f"{depot_chk['solver_modified_failed_swings']:,}",
+            help="Number of swings modified by CP-SAT that failed the Home Depot start/end check.",
+        )
+
+        depot_filter = st.radio(
+            "Filter Home Depot Swing Check Table",
+            options=["All Swings", "FAIL Only", "Modified by Solver Only"],
+            horizontal=True,
+        )
+        depot_rows = depot_chk["swing_rows"]
+        if depot_filter == "FAIL Only":
+            depot_rows = [r for r in depot_rows if r["Status"] == "FAIL"]
+        elif depot_filter == "Modified by Solver Only":
+            depot_rows = [r for r in depot_rows if r["Swing Context"] == "Modified by Solver"]
+        st.dataframe(depot_rows, use_container_width=True, hide_index=True)
+
+        st.markdown("#### 2. Active Constraint Switches & Assignment Type Priority (`Relief > Excess > Demand`)")
+        ac1, ac2 = st.columns([2, 1])
+        with ac1:
+            st.dataframe(diag["constraint_overview"], use_container_width=True, hide_index=True)
+        with ac2:
+            st.dataframe(diag["assignment_type_priority_table"], use_container_width=True, hide_index=True)
 
         # Improvement 4: Visual Per-Swing Shift-Limit Utilization Chart
-        st.markdown("#### 2. Per-Activity-Head Max Resident / FIFO Shifts vs Observed Utilization")
+        st.markdown("#### 3. Per-Activity-Head Max Resident / FIFO Shifts vs Observed Utilization")
         fig_limits = create_shift_limit_utilization_chart(diag["head_limits_table"])
         st.plotly_chart(fig_limits, use_container_width=True)
         st.dataframe(diag["head_limits_table"], use_container_width=True, hide_index=True)

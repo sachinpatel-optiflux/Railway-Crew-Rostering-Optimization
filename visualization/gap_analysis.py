@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from datetime import datetime, timedelta
 
 from visualization.data_loader import DashboardDataset
 from visualization.metrics import (
@@ -10,6 +11,157 @@ from visualization.metrics import (
     build_demand_slot_records,
     classify_user,
 )
+
+SWING_BREAK = timedelta(hours=48)
+
+
+def _parse_shift_interval(row: dict[str, str]) -> tuple[datetime, datetime] | None:
+    s_date = row.get("Start Date", "").strip()
+    e_date = row.get("End Date", "").strip() or s_date
+    s_time = row.get("Shift Start Time", "").strip()
+    e_time = row.get("Shift End Time", "").strip()
+    if not s_date or not s_time or not e_time:
+        return None
+    try:
+        s_dt = datetime.fromisoformat(f"{s_date}T{s_time}")
+        e_dt = datetime.fromisoformat(f"{e_date}T{e_time}")
+        if e_dt <= s_dt:
+            e_dt += timedelta(days=1)
+        return s_dt, e_dt
+    except ValueError:
+        return None
+
+
+def check_swing_home_depot(dataset: DashboardDataset) -> dict[str, object]:
+    """Check whether every crew member's assigned swing starts and ends at their Home Depot.
+
+    Follows the exact swing segmentation rule in `scripts/check_roster.py`:
+    - Collects all active work shifts (`Demand`, `Excess`, `Relief`) assigned to each crew member
+      (`Optimised User Id`, or `User Id` when `Optimised User Id` is absent).
+    - Orders shifts chronologically and splits into a new swing whenever the rest gap between
+      consecutive work shifts exceeds 48 hours (`SWING_BREAK`).
+    - Verifies `first_shift["Start Location"] == Home Depot` and `last_shift["End Location"] == Home Depot`.
+    """
+    per_user_work: dict[str, list[tuple[datetime, datetime, dict[str, str]]]] = defaultdict(list)
+    leave_dates_by_user: dict[str, set[str]] = defaultdict(set)
+    modified_users: set[str] = set()
+
+    for r in dataset.roster_rows:
+        in_horizon = r.get("In Horizon", "Yes").strip()
+        if in_horizon and in_horizon != "Yes":
+            continue
+        orig_uid = r.get("User Id", "").strip()
+        opt_uid = r.get("Optimised User Id", "").strip()
+        if r.get("Leave Type", "").strip() and orig_uid:
+            leave_dates_by_user[orig_uid].add(r.get("Start Date", "").strip())
+        if orig_uid != opt_uid:
+            if orig_uid:
+                modified_users.add(orig_uid)
+            if opt_uid:
+                modified_users.add(opt_uid)
+
+        atype = r.get("Assignment Type", "").strip()
+        if atype not in WORK_ASSIGNMENT_TYPES or not opt_uid:
+            continue
+        interval = _parse_shift_interval(r)
+        if interval is None:
+            continue
+        per_user_work[opt_uid].append((interval[0], interval[1], r))
+
+    swing_rows: list[dict[str, object]] = []
+    total_swings = 0
+    passed_swings = 0
+    failed_swings = 0
+    failed_start_count = 0
+    failed_end_count = 0
+    solver_modified_failed_swings = 0
+
+    for uid in sorted(per_user_work.keys()):
+        crew_info = dataset.crew_by_id.get(uid, {})
+        home_depot = crew_info.get("Depot", "").strip()
+        if not home_depot:
+            # Fallback to first row's Crew Home Depot if present
+            home_depot = per_user_work[uid][0][2].get("Crew Home Depot", "").strip()
+        if not home_depot:
+            continue
+
+        cls = crew_info.get("Classification", "").strip() or classify_user(
+            dataset, per_user_work[uid][0][2], uid
+        )
+
+        ordered = sorted(per_user_work[uid], key=lambda item: (item[0], item[1]))
+        swings: list[list[tuple[datetime, datetime, dict[str, str]]]] = [[ordered[0]]]
+        for prev, cur in zip(ordered, ordered[1:]):
+            gap = cur[0] - prev[1]
+            if gap > SWING_BREAK:
+                swings.append([cur])
+            else:
+                swings[-1].append(cur)
+
+        for idx, sw in enumerate(swings, start=1):
+            first_s, _, first_r = sw[0]
+            _, last_e, last_r = sw[-1]
+            start_loc = first_r.get("Start Location", "").strip()
+            end_loc = last_r.get("End Location", "").strip()
+            swing_label = first_r.get("Swing", "").strip() or str(idx)
+
+            starts_at_depot = start_loc == home_depot
+            ends_at_depot = end_loc == home_depot
+            passed = starts_at_depot and ends_at_depot
+
+            swing_modified = any(
+                item[2].get("User Id", "").strip() != item[2].get("Optimised User Id", "").strip()
+                for item in sw
+            )
+            has_user_leave = bool(leave_dates_by_user.get(uid))
+            if swing_modified:
+                context = "Modified by Solver"
+            elif has_user_leave:
+                context = "Unchanged (Leave-Disrupted)"
+            else:
+                context = "Unchanged Baseline"
+
+            total_swings += 1
+            if passed:
+                passed_swings += 1
+            else:
+                failed_swings += 1
+                if not starts_at_depot:
+                    failed_start_count += 1
+                if not ends_at_depot:
+                    failed_end_count += 1
+                if swing_modified:
+                    solver_modified_failed_swings += 1
+
+            swing_rows.append(
+                {
+                    "User Id": uid,
+                    "Crew Classification": cls,
+                    "Home Depot": home_depot,
+                    "Swing": swing_label,
+                    "Shifts in Swing": len(sw),
+                    "First Shift Start": f"{first_r.get('Start Date', '')} {first_r.get('Shift Start Time', '')}",
+                    "Start Location": start_loc,
+                    "Starts at Home Depot": starts_at_depot,
+                    "Last Shift End": f"{last_r.get('End Date', '') or last_r.get('Start Date', '')} {last_r.get('Shift End Time', '')}",
+                    "End Location": end_loc,
+                    "Ends at Home Depot": ends_at_depot,
+                    "Status": "PASS" if passed else "FAIL",
+                    "Swing Context": context,
+                }
+            )
+
+    pass_pct = round((passed_swings / total_swings) * 100.0, 2) if total_swings > 0 else 100.0
+    return {
+        "total_swings": total_swings,
+        "passed_swings": passed_swings,
+        "failed_swings": failed_swings,
+        "failed_start_count": failed_start_count,
+        "failed_end_count": failed_end_count,
+        "solver_modified_failed_swings": solver_modified_failed_swings,
+        "pass_pct": pass_pct,
+        "swing_rows": swing_rows,
+    }
 
 
 def build_unfilled_gap_records(
@@ -172,8 +324,18 @@ def build_constraint_diagnostics(dataset: DashboardDataset) -> dict[str, object]
     res_restrict = bool(dataset.config_flags.get("residential_start_restriction", True))
     relief_trans = bool(dataset.config_flags.get("relief_only_day_night_transition", True))
     prio_strategy = str(dataset.config_flags.get("priority_strategy", "none"))
+    type_prio_str = ", ".join(
+        f"{atype}: {p}"
+        for atype, p in sorted(dataset.assignment_type_priority.items(), key=lambda x: (x[1], x[0]))
+    )
 
     constraint_overview = [
+        {
+            "Constraint / Setting": "Assignment Type Priority (Gap-Fill Source Preference)",
+            "Source": "assignment_type_priority.csv",
+            "Status": "Active",
+            "Configured Value": type_prio_str,
+        },
         {
             "Constraint / Setting": "Activity Head Max Shifts (Max Resident / Max FIFO Shifts)",
             "Source": "constraints_df.csv + activity_priority.csv",
@@ -324,8 +486,35 @@ def build_constraint_diagnostics(dataset: DashboardDataset) -> dict[str, object]
             }
         )
 
+    # 5. Assignment Type Priority & Fills by Source Type
+    fills_by_source: Counter[str] = Counter()
+    candidates_by_source: Counter[str] = Counter()
+    for r in dataset.reassignments:
+        src = r.get("Source", "").strip()
+        if src:
+            fills_by_source[src] += 1
+    for c in dataset.gap_options:
+        src = c.get("Source", "").strip()
+        if src:
+            candidates_by_source[src] += 1
+
+    assignment_type_priority_table = [
+        {
+            "Priority": prio,
+            "Assignment Type": atype,
+            "Layer-1 Candidate Options": candidates_by_source.get(atype, 0),
+            "Selected Gap Fills (reassignments.csv)": fills_by_source.get(atype, 0),
+        }
+        for atype, prio in sorted(dataset.assignment_type_priority.items(), key=lambda x: (x[1], x[0]))
+    ]
+
+    # 6. Home Depot Swing Start & End Check
+    home_depot_check = check_swing_home_depot(dataset)
+
     return {
         "constraint_overview": constraint_overview,
+        "assignment_type_priority_table": assignment_type_priority_table,
+        "home_depot_check": home_depot_check,
         "rejection_summary": rejection_summary,
         "swing_availability": swing_availability,
         "head_limits_table": head_limits_table,

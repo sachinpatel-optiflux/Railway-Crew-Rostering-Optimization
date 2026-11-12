@@ -47,6 +47,7 @@ class Data:
     last_done: dict[tuple[str, str], date]  # (User Id, Activity Head) -> last performed
     priority: dict[str, int]  # Activity Head -> priority, 1 = highest
     max_shifts: dict = field(default_factory=dict)  # Activity Head -> ActivityHeadLimits
+    assignment_type_priority: dict[str, int] = field(default_factory=dict)  # Assignment Type -> priority, 1 = highest
 
 
 def load(data_dir: Path, roster_full: Path, config_path: Path = DEFAULT_CONFIG) -> Data:
@@ -69,12 +70,20 @@ def load(data_dir: Path, roster_full: Path, config_path: Path = DEFAULT_CONFIG) 
     if str(ROOT / "CP-SAT") not in sys.path:
         sys.path.insert(0, str(ROOT / "CP-SAT"))
     from utils.activity_head_priority import (
+        DEFAULT_ASSIGNMENT_TYPE_PRIORITIES,
         load_activity_head_limits,
         load_activity_head_priorities,
+        load_assignment_type_priorities,
     )
 
     demand_path = data_dir / "activity_demand_df.csv"
     priority_path = data_dir / "activity_priority.csv"
+    assign_prio_path = data_dir / "assignment_type_priority.csv"
+    assign_prio = (
+        load_assignment_type_priorities(assign_prio_path)
+        if assign_prio_path.exists()
+        else dict(DEFAULT_ASSIGNMENT_TYPE_PRIORITIES)
+    )
     return Data(
         rules=Rules.from_table(read_csv(data_dir / "constraints_df.csv"), config_path),
         activities={a["Activity ID"]: a for a in read_csv(data_dir / "activities_df.csv")},
@@ -93,6 +102,7 @@ def load(data_dir: Path, roster_full: Path, config_path: Path = DEFAULT_CONFIG) 
         },
         priority=load_activity_head_priorities(demand_path, priority_path),
         max_shifts=load_activity_head_limits(demand_path, priority_path),
+        assignment_type_priority=assign_prio,
     )
 
 

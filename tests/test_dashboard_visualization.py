@@ -23,6 +23,7 @@ from visualization.data_loader import (
 from visualization.gap_analysis import (
     build_constraint_diagnostics,
     build_unfilled_gap_records,
+    check_swing_home_depot,
     inspect_seat_candidates,
     parse_summary_and_validation,
     summarize_gaps,
@@ -292,3 +293,28 @@ def test_charts_and_real_solver_outputs_load_cleanly():
         comp = compare_strategy_datasets(discovered)
         assert comp["overall"]
         assert create_strategy_comparison_charts(comp)["by_head"] is not None
+
+
+def test_home_depot_swing_start_and_end_check(tmp_path: Path):
+    data_dir, cpsat_dir, opts_dir, cfg_path = _write_controlled_dataset(tmp_path)
+    ds = load_dashboard_dataset(data_dir, cpsat_dir, opts_dir, cfg_path)
+
+    # In the controlled dataset, both U_RES1 (Haskett -> Haskett) and U_FIFO1 (Nelaway -> Nelaway) start & end at home depot
+    chk = check_swing_home_depot(ds)
+    assert chk["total_swings"] == 2
+    assert chk["passed_swings"] == 2
+    assert chk["failed_swings"] == 0
+    assert chk["pass_pct"] == 100.0
+
+    # Now modify U_RES1's shift End Location to 'Yarmouth' (away from Home Depot 'Haskett')
+    ds.roster_rows[0]["End Location"] = "Yarmouth"
+    chk_fail = check_swing_home_depot(ds)
+    assert chk_fail["total_swings"] == 2
+    assert chk_fail["passed_swings"] == 1
+    assert chk_fail["failed_swings"] == 1
+    assert chk_fail["failed_end_count"] == 1
+    by_user = {r["User Id"]: r for r in chk_fail["swing_rows"]}
+    assert by_user["U_RES_1"]["Status"] == "FAIL"
+    assert by_user["U_RES_1"]["Starts at Home Depot"] is True
+    assert by_user["U_RES_1"]["Ends at Home Depot"] is False
+    assert by_user["U_FIFO_1"]["Status"] == "PASS"
