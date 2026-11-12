@@ -321,6 +321,7 @@ def build_constraint_diagnostics(dataset: DashboardDataset) -> dict[str, object]
     """Compile evidence-based diagnostics for constraints, swing availability, and per-swing shift limits."""
     # 1. Configured constraint switches & rule parameters
     max_shifts_status = dataset.constraints.get("Activity Head Max Shifts", ("", "Active"))[1]
+    assign_prio_status = dataset.constraints.get("Assignment Type Priority", ("", "Active"))[1]
     res_restrict = bool(dataset.config_flags.get("residential_start_restriction", True))
     relief_trans = bool(dataset.config_flags.get("relief_only_day_night_transition", True))
     prio_strategy = str(dataset.config_flags.get("priority_strategy", "none"))
@@ -332,8 +333,8 @@ def build_constraint_diagnostics(dataset: DashboardDataset) -> dict[str, object]
     constraint_overview = [
         {
             "Constraint / Setting": "Assignment Type Priority (Gap-Fill Source Preference)",
-            "Source": "assignment_type_priority.csv",
-            "Status": "Active",
+            "Source": "constraints_df.csv + assignment_type_priority.csv",
+            "Status": assign_prio_status,
             "Configured Value": type_prio_str,
         },
         {
