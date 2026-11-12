@@ -6,8 +6,9 @@ import csv
 from collections import Counter
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ACTIVITY_HEAD_PRIORITY = ROOT / "config" / "activity_head_priority.csv"
+from option_generation.data import DEFAULT_DATA_DIR
+
+DEFAULT_ACTIVITY_HEAD_PRIORITY = DEFAULT_DATA_DIR / "activity_priority.csv"
 PRIORITY_WEIGHTS = {
     1: 14,
     2: 13,

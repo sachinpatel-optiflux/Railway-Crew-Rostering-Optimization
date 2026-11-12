@@ -68,6 +68,10 @@ class Option:
     level: int = -1  # chain level of the seat (fill only)
     unchanged: bool = False  # same existing assignment, even when represented as a fill option
 
+    def __post_init__(self) -> None:
+        if self.kind == "keep" and not self.unchanged:
+            object.__setattr__(self, "unchanged", True)
+
 
 @dataclass
 class Seat:
@@ -270,17 +274,18 @@ def ride_options(data: Data, swing: Swing, index: int, target_keys: set[str], co
 # ---------------------------------------------------------------------------
 
 
-def can_open(data: Data, swing: Swing, option: Option) -> bool:
+def can_open(rules_or_data: Rules | Data, swing, option: Option) -> bool:
+    rules = getattr(rules_or_data, "rules", rules_or_data)
     if option.start_loc != swing.home or (swing.earliest_start and option.start < swing.earliest_start):
         return False
-    return swing.classification != "Residential" or data.rules.is_day(option.start)
+    return swing.classification != "Residential" or rules.is_day(option.start)
 
 
-def can_close(swing: Swing, option: Option) -> bool:
+def can_close(swing, option: Option) -> bool:
     return option.end_loc == swing.home and not (swing.latest_end and option.end > swing.latest_end)
 
 
-def skippable(swing: Swing, first: int, last: int) -> bool:
+def skippable(swing, first: int, last: int) -> bool:
     """True if every row strictly between positions `first` and `last` may be dropped."""
     return all(swing.droppable[i] for i in range(first + 1, last))
 

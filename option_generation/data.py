@@ -63,6 +63,12 @@ def load(data_dir: Path, roster_full: Path, config_path: Path = DEFAULT_CONFIG) 
         m["Activity ID"]: {u for u in m["Eligible User Ids"].split(";") if u}
         for m in read_csv(data_dir / "eligibility_matrix.csv")
     }
+    import sys
+
+    if str(ROOT / "CP-SAT") not in sys.path:
+        sys.path.insert(0, str(ROOT / "CP-SAT"))
+    from utils.activity_head_priority import load_activity_head_priorities
+
     return Data(
         rules=Rules.from_table(read_csv(data_dir / "constraints_df.csv"), config_path),
         activities={a["Activity ID"]: a for a in read_csv(data_dir / "activities_df.csv")},
@@ -79,7 +85,9 @@ def load(data_dir: Path, roster_full: Path, config_path: Path = DEFAULT_CONFIG) 
             (r["User Id"], r["Activity Head"]): date.fromisoformat(r["Last Performed Date"])
             for r in read_csv(data_dir / "crew_currency_df.csv")
         },
-        priority={r["Activity Head"]: int(r["Priority"]) for r in read_csv(data_dir / "activity_priority.csv")},
+        priority=load_activity_head_priorities(
+            data_dir / "activity_demand_df.csv", data_dir / "activity_priority.csv"
+        ),
     )
 
 

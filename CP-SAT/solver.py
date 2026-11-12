@@ -13,9 +13,10 @@ base start B and a changed start N, at most `Max Start Change Minutes` apart, an
 worked shift before the switch starts at B, every one after it at N. So the start changes at most once.
 Relief standby rows have no fixed start and are not part of the pattern.
 
-Stage 1 maximises weighted demand coverage using the centrally configured activity-head priority
-weights. Stage 2 fixes the optimal weighted coverage and makes the cheapest change to the roster
-(costs from option_generation.options.Costs).
+Stage 1 maximises total demand coverage. Depending on `priority_strategy` (`none`, `weighted`, or
+`lexicographic`), optional intermediate stages maximise weighted or per-priority activity-head
+coverage after fixing each preceding proven optimum. The final stage fixes all preceding optimal
+objectives and minimises assignment cost (from `option_generation.options.Costs`).
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from ortools.sat.python import cp_model
 from utils.activity_head_priority import PRIORITY_WEIGHTS
 from utils.load_options import ModelSwing, SeatInfo
 
-from option_generation.options import Costs, Option
+from option_generation.options import Costs, Option, can_close, can_open, skippable
 from option_generation.rules import Rules
 
 
@@ -44,20 +45,6 @@ class Result:
     stage_statuses: dict[str, str] = field(default_factory=dict)
     stage_values: dict[str, int] = field(default_factory=dict)  # objective value of each stage that ran
     stage_bounds: dict[str, float] = field(default_factory=dict)  # CP-SAT best objective bound of each stage
-
-
-def _can_open(rules: Rules, sw: ModelSwing, o: Option) -> bool:
-    if o.start_loc != sw.home or (sw.earliest_start and o.start < sw.earliest_start):
-        return False
-    return sw.classification != "Residential" or rules.is_day(o.start)
-
-
-def _can_close(sw: ModelSwing, o: Option) -> bool:
-    return o.end_loc == sw.home and not (sw.latest_end and o.end > sw.latest_end)
-
-
-def _skippable(sw: ModelSwing, first: int, last: int) -> bool:
-    return all(sw.droppable[i] for i in range(first + 1, last))
 
 
 def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], costs: Costs, time_limit: float,
@@ -87,7 +74,7 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
             lits = []
             for o in opts:
                 if (rules.residential_start_restriction and sw.classification == "Residential"
-                        and not o.unchanged and o.kind != "keep"
+                        and not o.unchanged
                         and not rules.residential_start_allowed(o.start)):
                     continue
                 lit = new_bool(f"w{n}_r{i}_{o.kind}{len(nodes)}")
@@ -111,12 +98,12 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
 
         last = len(sw.options)
         for a, (first, _) in enumerate(nodes, start=1):
-            if _skippable(sw, -1, first.row_index) and _can_open(rules, sw, first):
+            if skippable(sw, -1, first.row_index) and can_open(rules, sw, first):
                 arcs.append((0, a, new_bool(f"w{n}_open{a}")))
-            if _skippable(sw, first.row_index, last) and _can_close(sw, first):
+            if skippable(sw, first.row_index, last) and can_close(sw, first):
                 arcs.append((a, 0, new_bool(f"w{n}_close{a}")))
             for b, (second, _) in enumerate(nodes, start=1):
-                if (first.row_index < second.row_index and _skippable(sw, first.row_index, second.row_index)
+                if (first.row_index < second.row_index and skippable(sw, first.row_index, second.row_index)
                         and rules.can_follow(first, second)):  # fmt: skip
                     arcs.append((a, b, new_bool(f"w{n}_{a}_{b}")))
         model.add_circuit(arcs)

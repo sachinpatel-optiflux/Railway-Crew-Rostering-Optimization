@@ -21,8 +21,8 @@ python scripts/run_pipeline.py
 | `--workers` | 8 | CP-SAT threads |
 | `--config` | `config.yml` | Shared constraint switches; use the same file as option generation |
 
-Demand filling priorities are configured separately in
-[`config/activity_head_priority.csv`](../config/activity_head_priority.csv). It must contain exactly one
+Demand filling priorities are configured in
+[`data/optiflux_v2/activity_priority.csv`](../data/optiflux_v2/activity_priority.csv) (or `activity_priority.csv` inside `--data-dir`). It must contain exactly one
 priority per demand activity head. Each priority must have a weight in `PRIORITY_WEIGHTS` in
 `CP-SAT/utils/activity_head_priority.py`; lower numbers indicate higher priority. Missing, duplicate,
 invalid, unweighted, and non-demand activity-head entries are rejected before solving.

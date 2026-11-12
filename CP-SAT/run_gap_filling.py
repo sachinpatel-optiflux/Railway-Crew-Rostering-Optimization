@@ -18,10 +18,6 @@ sys.path.insert(0, str(HERE.parent))  # option_generation
 sys.path.insert(0, str(HERE))  # solver, utils
 
 from solver import solve  # noqa: E402
-from utils.activity_head_priority import (  # noqa: E402
-    DEFAULT_ACTIVITY_HEAD_PRIORITY,
-    load_activity_head_priorities,
-)
 from utils.load_options import load_options  # noqa: E402
 from utils.output import apply, write_outputs, write_summary  # noqa: E402
 from utils.validate import validate  # noqa: E402
@@ -54,10 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     data = load(args.data_dir, args.roster_full, args.config)
-    activity_head_priorities = load_activity_head_priorities(
-        args.data_dir / "activity_demand_df.csv", DEFAULT_ACTIVITY_HEAD_PRIORITY
-    )
-    seats, swings = load_options(args.options_dir, activity_head_priorities)
+    seats, swings = load_options(args.options_dir, data.priority)
     frozen = {(s["User Id"], s["Swing"]) for s in read_csv(args.options_dir / "swings.csv") if s["Status"] == "frozen"}
     print(f"Seats {len(seats)}, swings in the model {len(swings)}, "
           f"options {sum(len(o) for sw in swings for o in sw.options)}")  # fmt: skip

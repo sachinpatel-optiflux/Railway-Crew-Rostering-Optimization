@@ -17,6 +17,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from option_generation.data import ROOT, WORK_TYPES, Data, why_not_eligible, write_csv
+from option_generation.rules import SWING_BREAK
 
 COPIED_TABLES = (
     "activities_df.csv", "activity_demand_df.csv", "activity_priority.csv", "compliance_matrix_df.csv",
@@ -65,15 +66,20 @@ def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, 
         return None
 
     def is_changed_assignment(row: dict) -> bool:
-        if row["Optimised User Id"] != row["New User Id"]:
-            return True
         if row.get("Optimisation Note", "").startswith("filled by "):
             source = source_assignment(row)
-            return source is None or source["_s"] != row["_s"] or source["Activity ID"] != row["Activity ID"]
-        return False
+            return (
+                source is None
+                or source["New User Id"] != row["Optimised User Id"]
+                or source["_s"] != row["_s"]
+                or source["Activity ID"] != row["Activity ID"]
+            )
+        return row["Optimised User Id"] != row["New User Id"]
 
     changed_people = {
-        r["Optimised User Id"] for r in roster if r["Optimised User Id"] and is_changed_assignment(r)
+        r["Optimised User Id"]
+        for r in roster
+        if r["Optimised User Id"] and (r["Optimised User Id"] != r["New User Id"] or is_changed_assignment(r))
     }
     before_start = [r["Assignment ID"] for r in roster if r["_s"].date() < rules.solver_start
                     and r["Optimised User Id"] != r["New User Id"]]  # fmt: skip
@@ -125,7 +131,7 @@ def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, 
         changes = 0
         for a, b in zip(rows, rows[1:]):
             gap = b["_s"] - a["_e"]
-            if gap.total_seconds() > 48 * 3600:
+            if gap > SWING_BREAK:
                 changes = 0
                 continue
             if a["_s"].date() == b["_s"].date() or gap < rules.rest:
@@ -142,7 +148,7 @@ def recovery_checks(data: Data, roster: list[dict], frozen_keys: set[tuple[str, 
         worked = [r for r in rows if r["Assignment Type"] != "Relief"]
         changes = 0
         for a, b in zip(worked, worked[1:]):
-            if (b["_s"] - a["_e"]).total_seconds() > 48 * 3600 or rules.is_day(a["_s"]) != rules.is_day(b["_s"]):
+            if b["_s"] - a["_e"] > SWING_BREAK or rules.is_day(a["_s"]) != rules.is_day(b["_s"]):
                 changes = 0
                 continue
             step = abs(rules.block_minute(a["_s"]) - rules.block_minute(b["_s"]))

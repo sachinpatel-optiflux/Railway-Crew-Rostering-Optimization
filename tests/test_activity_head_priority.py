@@ -21,7 +21,7 @@ from option_generation.rules import Rules  # noqa: E402
 
 def write_priority_inputs(tmp_path: Path, demand_heads: str, priorities: str) -> tuple[Path, Path]:
     demand = tmp_path / "activity_demand_df.csv"
-    priority = tmp_path / "activity_head_priority.csv"
+    priority = tmp_path / "activity_priority.csv"
     demand.write_text(f"Activity Head\n{demand_heads}", encoding="utf-8")
     priority.write_text(f"Activity Head,Priority\n{priorities}", encoding="utf-8")
     return demand, priority
