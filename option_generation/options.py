@@ -67,6 +67,7 @@ class Option:
     cost: int = 0
     level: int = -1  # chain level of the seat (fill only)
     unchanged: bool = False  # same existing assignment, even when represented as a fill option
+    activity_head: str = ""
 
     def __post_init__(self) -> None:
         if self.kind == "keep" and not self.unchanged:
@@ -170,10 +171,11 @@ def changeable(data: Data, row: dict) -> bool:
 def keep_option(data: Data, index: int, row: dict) -> Option:
     typ = row["Assignment Type"]
     key = seat_key(row["Activity ID"], row["_s"])
+    head = row.get("Activity Head") or data.activities.get(row["Activity ID"], {}).get("Activity Head", "")
     return Option(index, "keep", row["_s"], row["_e"], row["Start Location"], row["End Location"],
                   row["Activity ID"], row["Demand ID"], seat=key if typ == "Demand" else "",
                   excess_seat=key if typ == "Excess" else "", standby=typ == "Relief", source=typ,
-                  unchanged=True)  # fmt: skip
+                  unchanged=True, activity_head=head)  # fmt: skip
 
 
 def build_seats(data: Data) -> dict[str, Seat]:
@@ -246,7 +248,7 @@ def try_fill(data: Data, swing: Swing, index: int, seat: Seat, costs: Costs) -> 
     end = seat.start + timedelta(hours=data.rules.shift_hours)
     return Option(index, "fill", seat.start, end, activity["Start Depot"], activity["End Depot"], seat.activity_id,
                   seat.demand_id, seat=seat.key, source=typ, offset=offset, cost=cost,
-                  level=seat.level, unchanged=same_seat), ""  # fmt: skip
+                  level=seat.level, unchanged=same_seat, activity_head=activity.get("Activity Head", "")), ""  # fmt: skip
 
 
 def ride_options(data: Data, swing: Swing, index: int, target_keys: set[str], costs: Costs) -> list[Option]:
@@ -265,7 +267,8 @@ def ride_options(data: Data, swing: Swing, index: int, target_keys: set[str], co
         rides.append(Option(index, "ride", start, start + timedelta(hours=data.rules.shift_hours),
                             activity["Start Depot"], activity["End Depot"], activity_id,
                             data.demand[(activity_id, shift)]["Demand ID"], excess_seat=key,
-                            source=row["Assignment Type"], cost=costs.ride))  # fmt: skip
+                            source=row["Assignment Type"], cost=costs.ride,
+                            activity_head=activity.get("Activity Head", "")))  # fmt: skip
     return rides
 
 

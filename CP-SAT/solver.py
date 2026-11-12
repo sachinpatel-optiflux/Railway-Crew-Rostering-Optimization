@@ -25,7 +25,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
-from utils.activity_head_priority import PRIORITY_WEIGHTS
+from utils.activity_head_priority import PRIORITY_WEIGHTS, ActivityHeadLimits
 from utils.load_options import ModelSwing, SeatInfo
 
 from option_generation.options import Costs, Option, can_close, can_open, skippable
@@ -47,13 +47,64 @@ class Result:
     stage_bounds: dict[str, float] = field(default_factory=dict)  # CP-SAT best objective bound of each stage
 
 
+def _coerce_head_limit(spec) -> ActivityHeadLimits:
+    if isinstance(spec, ActivityHeadLimits):
+        return spec
+    if isinstance(spec, dict):
+        res = spec.get("Residential", spec.get("Resident", spec.get("max_resident_shifts")))
+        fifo = spec.get("FIFO", spec.get("max_fifo_shifts"))
+        if res is None or fifo is None or int(res) < 0 or int(fifo) < 0:
+            raise ValueError(f"invalid activity-head shift limits: {spec!r}")
+        return ActivityHeadLimits(max_resident_shifts=int(res), max_fifo_shifts=int(fifo))
+    if isinstance(spec, (tuple, list)) and len(spec) == 2:
+        if int(spec[0]) < 0 or int(spec[1]) < 0:
+            raise ValueError(f"invalid activity-head shift limits: {spec!r}")
+        return ActivityHeadLimits(max_resident_shifts=int(spec[0]), max_fifo_shifts=int(spec[1]))
+    raise ValueError(f"invalid activity-head shift limits: {spec!r}")
+
+
+def _collect_head_limits(
+    rules: Rules, seats: dict[str, SeatInfo], activity_head_limits: dict | None
+) -> tuple[dict[str, ActivityHeadLimits], dict[str, str]]:
+    head_limits: dict[str, ActivityHeadLimits] = {}
+    head_by_activity: dict[str, str] = {}
+    for key, seat in seats.items():
+        act_id = getattr(seat, "activity_id", "")
+        head = getattr(seat, "activity_head", "") or act_id or key
+        if act_id and getattr(seat, "activity_head", ""):
+            head_by_activity[act_id] = seat.activity_head
+        res = getattr(seat, "max_resident_shifts", None)
+        fifo = getattr(seat, "max_fifo_shifts", None)
+        if res is not None and fifo is not None:
+            head_limits[head] = ActivityHeadLimits(max_resident_shifts=int(res), max_fifo_shifts=int(fifo))
+    raw_limits = activity_head_limits if activity_head_limits is not None else getattr(rules, "activity_head_limits", None)
+    if raw_limits:
+        for head, spec in raw_limits.items():
+            head_limits[head] = _coerce_head_limit(spec)
+    return head_limits, head_by_activity
+
+
+def _option_activity_head(o: Option, seats: dict[str, SeatInfo], head_by_activity: dict[str, str]) -> str:
+    if getattr(o, "activity_head", ""):
+        return o.activity_head
+    if o.seat and o.seat in seats and getattr(seats[o.seat], "activity_head", ""):
+        return seats[o.seat].activity_head
+    if o.excess_seat and o.excess_seat in seats and getattr(seats[o.excess_seat], "activity_head", ""):
+        return seats[o.excess_seat].activity_head
+    if o.activity_id in head_by_activity:
+        return head_by_activity[o.activity_id]
+    return o.activity_id
+
+
 def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], costs: Costs, time_limit: float,
-          workers: int, seed: int, log: bool = False, priority_strategy: str | None = None) -> Result:  # fmt: skip
+          workers: int, seed: int, log: bool = False, priority_strategy: str | None = None,
+          activity_head_limits: dict | None = None) -> Result:  # fmt: skip
     if rules.max_changes not in (0, 1):
         raise SystemExit("error: the model supports Max Start Changes Per Block of 0 or 1")
     priority_strategy = rules.priority_strategy if priority_strategy is None else priority_strategy
     if not isinstance(priority_strategy, str) or priority_strategy not in ("none", "weighted", "lexicographic"):
         raise ValueError("priority_strategy must be one of: none, weighted, lexicographic")
+    head_limits, head_by_activity = _collect_head_limits(rules, seats, activity_head_limits)
     model = cp_model.CpModel()
     tracked: list = []
     picks: list[tuple[ModelSwing, list[tuple[Option, object]], list[object | None]]] = []
@@ -131,6 +182,16 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
                 m = rules.block_minute(o.start)
                 model.add(base == m).only_enforce_if([lit, after[o.row_index].Not()])
                 model.add(new == m).only_enforce_if([lit, after[o.row_index]])
+        if getattr(rules, "activity_head_max_shifts", True) and head_limits:
+            by_head: dict[str, list] = defaultdict(list)
+            for o, lit in nodes:
+                if o.standby:
+                    continue
+                head = _option_activity_head(o, seats, head_by_activity)
+                if head in head_limits:
+                    by_head[head].append(lit)
+            for head, head_lits in by_head.items():
+                model.add(sum(head_lits) <= head_limits[head].limit_for(sw.classification))
         picks.append((sw, nodes, dropped))
 
     # Seat capacity bounds the number of demand positions credited to the objective.
