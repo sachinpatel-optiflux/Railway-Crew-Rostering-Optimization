@@ -25,10 +25,10 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
-from utils.activity_head_priority import PRIORITY_WEIGHTS
 from utils.load_options import ModelSwing, SeatInfo
 
 from option_generation.options import Costs, Option, can_close, can_open, skippable
+from option_generation.priority import priority_weights_for
 from option_generation.rules import Rules
 
 
@@ -154,8 +154,9 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
 
     print(f"Model: {len(picks)} swings, {len(tracked)} variables, {len(at_seat)} seats")
     coverage = [lit for lits in at_seat.values() for lit in lits]
+    priority_weights = priority_weights_for(seat.priority for seat in seats.values())
     weighted_coverage = sum(
-        PRIORITY_WEIGHTS[seats[key].priority] * sum(lits)
+        priority_weights[seats[key].priority] * sum(lits)
         for key, lits in at_seat.items()
     )
     stages: list[tuple[str, object, bool, str]] = [
@@ -204,13 +205,14 @@ def solve(rules: Rules, seats: dict[str, SeatInfo], swings: list[ModelSwing], co
             stage_bounds[name] = solver.best_objective_bound
             final = solver
             stage_solvers[name] = solver
-            if code == cp_model.OPTIMAL and index < len(stages):
-                model.add(objective == value)
+            if index < len(stages):
+                if code == cp_model.OPTIMAL:
+                    model.add(objective == value)
+                else:
+                    model.add(objective >= value if maximize else objective <= value)
                 model.clear_hints()
                 for var in tracked:
                     model.add_hint(var, solver.value(var))
-            elif code != cp_model.OPTIMAL:
-                blocked_stage = (name, status, index)
         else:
             print(f", {solver.wall_time:.1f}s")
             blocked_stage = (name, status, index)

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
+from .priority import load_activity_head_priorities
 from .rules import DEFAULT_CONFIG, Rules
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,11 +64,6 @@ def load(data_dir: Path, roster_full: Path, config_path: Path = DEFAULT_CONFIG) 
         m["Activity ID"]: {u for u in m["Eligible User Ids"].split(";") if u}
         for m in read_csv(data_dir / "eligibility_matrix.csv")
     }
-    import sys
-
-    if str(ROOT / "CP-SAT") not in sys.path:
-        sys.path.insert(0, str(ROOT / "CP-SAT"))
-    from utils.activity_head_priority import load_activity_head_priorities
 
     return Data(
         rules=Rules.from_table(read_csv(data_dir / "constraints_df.csv"), config_path),

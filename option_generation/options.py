@@ -25,8 +25,12 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from .data import PERSON, TRAVEL_TYPES, WORK_TYPES, Data, why_not_eligible
+
+if TYPE_CHECKING:
+    from .rules import Rules
 
 FREE_TYPES = ("Excess", "Relief")
 RETURN_RIDES = (("A03", "22:00"),)  # the Work Train return seat: Excess on Yarmouth Mainline 22:00
@@ -274,8 +278,7 @@ def ride_options(data: Data, swing: Swing, index: int, target_keys: set[str], co
 # ---------------------------------------------------------------------------
 
 
-def can_open(rules_or_data: Rules | Data, swing, option: Option) -> bool:
-    rules = getattr(rules_or_data, "rules", rules_or_data)
+def can_open(rules: Rules, swing, option: Option) -> bool:
     if option.start_loc != swing.home or (swing.earliest_start and option.start < swing.earliest_start):
         return False
     return swing.classification != "Residential" or rules.is_day(option.start)
@@ -295,7 +298,7 @@ def prune(data: Data, swing: Swing) -> None:
     reach_start: set[Option] = set()
     for i, options in enumerate(swing.raw):
         for option in options:
-            if skippable(swing, -1, i) and can_open(data, swing, option):
+            if skippable(swing, -1, i) and can_open(rules, swing, option):
                 reach_start.add(option)
                 continue
             for j in range(i):

@@ -11,11 +11,11 @@ sys.path.insert(0, str(ROOT / "CP-SAT"))
 
 import solver as solver_module  # noqa: E402
 from solver import solve  # noqa: E402
-from utils.activity_head_priority import PRIORITY_WEIGHTS, load_activity_head_priorities  # noqa: E402
 from utils.load_options import load_options  # noqa: E402
 
 from option_generation.data import DEFAULT_DATA_DIR, read_csv  # noqa: E402
 from option_generation.options import Costs, Option  # noqa: E402
+from option_generation.priority import load_activity_head_priorities, priority_weights_for  # noqa: E402
 from option_generation.rules import Rules  # noqa: E402
 
 
@@ -39,8 +39,8 @@ def test_default_priority_config_covers_every_project_demand_head():
     assert len(priorities) == 14
 
 
-def test_priority_weights_are_configured_centrally():
-    assert PRIORITY_WEIGHTS == {priority: 15 - priority for priority in range(1, 15)}
+def test_priority_weights_are_derived_from_data():
+    assert priority_weights_for([1, 2, 15]) == {1: 15, 2: 14, 15: 1}
 
 
 def test_load_options_applies_configured_head_priorities(tmp_path: Path):
@@ -95,21 +95,20 @@ def test_activity_head_priorities_reject_duplicate_entries(tmp_path: Path):
         load_activity_head_priorities(demand, priority)
 
 
-@pytest.mark.parametrize("value", ["0", "-1", "15", "urgent", ""])
-def test_activity_head_priorities_reject_values_without_configured_weights(tmp_path: Path, value: str):
+@pytest.mark.parametrize("value", ["0", "-1", "urgent", ""])
+def test_activity_head_priorities_reject_non_positive_values(tmp_path: Path, value: str):
     demand, priority = write_priority_inputs(tmp_path, "High\n", f"High,{value}\n")
 
-    with pytest.raises(SystemExit, match="must be integers with configured weights"):
+    with pytest.raises(SystemExit, match="must be positive integers"):
         load_activity_head_priorities(demand, priority)
 
 
-def test_activity_head_priority_accepts_priority_with_central_weight(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    demand, priority = write_priority_inputs(tmp_path, "High\n", "High,21\n")
-    monkeypatch.setitem(PRIORITY_WEIGHTS, 21, 3)
+def test_activity_head_priority_accepts_priorities_above_14(tmp_path: Path):
+    demand, priority = write_priority_inputs(tmp_path, "High\n", "High,15\n")
+    assert load_activity_head_priorities(demand, priority) == {"High": 15}
 
-    assert load_activity_head_priorities(demand, priority) == {"High": 21}
+    demand2, priority2 = write_priority_inputs(tmp_path, "High\n", "High,21\n")
+    assert load_activity_head_priorities(demand2, priority2) == {"High": 21}
 
 
 def test_cp_sat_prefers_higher_priority_head_when_demand_cannot_all_be_filled():
@@ -312,13 +311,13 @@ def test_cp_sat_stage_two_preserves_weighted_coverage_and_minimizes_cost():
     assert result.cost_status == "OPTIMAL"
     assert result.places_filled == 1
     assert result.chosen[swing.key] == [cheap]
-    assert PRIORITY_WEIGHTS[seats["shared-seat"].priority] * result.places_filled == 14
+    assert result.stage_values["weighted_priority"] == 1
     assert result.cost == cheap.cost
     assert list(result.stage_statuses) == ["coverage", "weighted_priority", "cost"]
 
 
-def test_cp_sat_reports_when_stage_two_is_skipped_for_feasible_stage_one(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_cp_sat_runs_stage_two_after_feasible_stage_one(
+    monkeypatch: pytest.MonkeyPatch,
 ):
     rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"))
     rules = replace(
@@ -365,15 +364,15 @@ def test_cp_sat_reports_when_stage_two_is_skipped_for_feasible_stage_one(
 
     result = solve(rules, seats, [swing], Costs(), 5, 1, 0)
 
-    assert result.cost_status == "SKIPPED (Stage 1 FEASIBLE)"
+    assert result.cost_status == "FEASIBLE"
     assert result.stage_statuses == {
         "coverage": "FEASIBLE",
-        "cost": "SKIPPED (Stage 1 FEASIBLE)",
+        "cost": "FEASIBLE",
     }
-    assert "Stage 2 (SKIPPED): Stage 1 was FEASIBLE, not OPTIMAL" in capsys.readouterr().out
+    assert result.cost is not None
 
 
-def test_cp_sat_skips_later_stages_when_intermediate_priority_stage_is_feasible(
+def test_cp_sat_continues_later_stages_when_intermediate_priority_stage_is_feasible(
     monkeypatch: pytest.MonkeyPatch,
 ):
     rules = Rules.from_table(read_csv(DEFAULT_DATA_DIR / "constraints_df.csv"))
@@ -428,14 +427,14 @@ def test_cp_sat_skips_later_stages_when_intermediate_priority_stage_is_feasible(
 
     assert result.places_filled == 1
     assert result.bound == 1.0  # solver optimization bound (1.0), not total seat capacity (4)
-    assert result.cost is None
+    assert result.cost == 20
     assert result.stage_statuses == {
         "coverage": "OPTIMAL",
         "priority_1": "FEASIBLE",
-        "priority_2": "SKIPPED (Stage 2 FEASIBLE)",
-        "cost": "SKIPPED (Stage 2 FEASIBLE)",
+        "priority_2": "OPTIMAL",
+        "cost": "OPTIMAL",
     }
-    assert set(result.stage_values) == {"coverage", "priority_1"}  # skipped stages report no value
+    assert set(result.stage_values) == {"coverage", "priority_1", "priority_2", "cost"}
 
 
 def test_lexicographic_priority_level_without_in_model_seats_is_solved_as_zero():
